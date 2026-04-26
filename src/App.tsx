@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Cloud, Cpu, Terminal as Terminals, Activity, User, Shield, Zap, Globe, Sun, CloudRain, Wind } from "lucide-react";
-import { getJarvisResponse, getJarvisAudio, resetJarvisSession, generateJarvisImage } from "./services/geminiService";
+import { getKyrosResponse, getKyrosAudio, resetKyrosSession, generateKyrosImage } from "./services/geminiService";
 import { processCommand } from "./services/commandService";
 import { LiveSessionManager } from "./services/liveService";
 import Visualizer from "./components/Visualizer";
@@ -12,7 +12,7 @@ type AppState = "idle" | "listening" | "processing" | "speaking";
 
 interface ChatMessage {
   id: string;
-  sender: "user" | "jarvis";
+  sender: "user" | "kyros";
   text: string;
   imageUrl?: string;
   videoUrl?: string;
@@ -102,7 +102,7 @@ const LoginScreen = ({ onLogin }: { onLogin: (name: string) => void }) => {
         </form>
 
         <div className="flex gap-4">
-          {['AUTH_V6', 'SSL_256', 'JARVIS_LINK'].map(id => (
+          {['AUTH_V6', 'SSL_256', 'KYROS_LINK'].map(id => (
             <span key={id} className="text-[8px] font-mono text-cyan-500/40 border border-cyan-500/10 px-2 py-0.5 rounded">{id}</span>
           ))}
         </div>
@@ -112,13 +112,13 @@ const LoginScreen = ({ onLogin }: { onLogin: (name: string) => void }) => {
 };
 
 export default function App() {
-  const [user, setUser] = useState<string | null>(() => localStorage.getItem("jarvis_user"));
+  const [user, setUser] = useState<string | null>(() => localStorage.getItem("kyros_user"));
   const [appState, setAppState] = useState<AppState>("idle");
   const [uiMode, setUiMode] = useState<"voice" | "chat">("voice");
   const [vizColor, setVizColor] = useState<string | undefined>();
   const [vizIntensity, setVizIntensity] = useState<"high" | "low" | undefined>();
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem("jarvis_chat_history");
+    const saved = localStorage.getItem("kyros_chat_history");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -202,7 +202,7 @@ export default function App() {
 
   useEffect(() => {
     messagesRef.current = messages;
-    localStorage.setItem("jarvis_chat_history", JSON.stringify(messages));
+    localStorage.setItem("kyros_chat_history", JSON.stringify(messages));
   }, [messages]);
 
   const [isMuted, setIsMuted] = useState(false);
@@ -331,13 +331,58 @@ export default function App() {
           }).catch(console.error);
         }
         break;
+      case "local_command":
+        if (params[0] && params[1]) {
+          fetch("/api/automate/command", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: params[0], cmd: params[1] }),
+          }).catch(console.error);
+        }
+        break;
       case "local_file":
         if (params[0] && params[1]) {
+          const action = params[0];
+          const fileName = params[1];
+          const content = params[2] || "";
+          
           fetch("/api/automate/file", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "create", fileName: params[0], content: params[1] }),
-          }).catch(console.error);
+            body: JSON.stringify({ action, fileName, content }),
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (action === "read" && data.content) {
+               setMessages((prev) => [...prev, { 
+                 id: Date.now().toString() + "-file", 
+                 sender: "kyros", 
+                 text: `I've retrieved the data from ${fileName}:\n\n${data.content.substring(0, 500)}...` 
+               }]);
+            }
+          })
+          .catch(console.error);
+        }
+        break;
+      case "analyze_web":
+        if (params[0]) {
+          const url = params[0];
+          (async () => {
+            try {
+              const res = await fetch("/api/scrape", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url }),
+              });
+              const data = await res.json();
+              if (data.status === "success") {
+                const aiResponse = await getKyrosResponse(`Analyze this content from ${url} and explain it briefly: ${data.content}`, messages);
+                setMessages((prev) => [...prev, { id: Date.now().toString(), sender: "kyros", text: aiResponse }]);
+              }
+            } catch (err) {
+              console.error(err);
+            }
+          })();
         }
         break;
       case "play_video":
@@ -345,7 +390,7 @@ export default function App() {
           const query = params.join(":");
           setMessages((prev) => [...prev, { 
             id: Date.now().toString() + "-vid", 
-            sender: "jarvis", 
+            sender: "kyros", 
             text: `I have initiated the visual stream for: ${query}. Synchronizing bandwidth...`,
             videoUrl: `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}` 
           }]);
@@ -355,18 +400,18 @@ export default function App() {
         if (params[0]) {
           const prompt = params.join(":"); // Rejoin in case prompt has colons
           (async () => {
-             const imageUrl = await generateJarvisImage(prompt);
+             const imageUrl = await generateKyrosImage(prompt);
              if (imageUrl) {
                setMessages((prev) => [...prev, { 
                  id: Date.now().toString() + "-img", 
-                 sender: "jarvis", 
+                 sender: "kyros", 
                  text: "I have generated the image as requested, sir.",
                  imageUrl 
                }]);
              } else {
                 setMessages((prev) => [...prev, { 
                   id: Date.now().toString() + "-err", 
-                  sender: "jarvis", 
+                  sender: "kyros", 
                   text: "I apologize, sir, but I encountered an error during the rendering process." 
                 }]);
              }
@@ -399,11 +444,11 @@ export default function App() {
 
     if (commandResult.isBrowserAction) {
       responseText = commandResult.action;
-      setMessages((prev) => [...prev, { id: Date.now().toString() + "-j", sender: "jarvis", text: responseText }]);
+      setMessages((prev) => [...prev, { id: Date.now().toString() + "-j", sender: "kyros", text: responseText }]);
       
       if (!isMuted) {
         setAppState("speaking");
-        const audioBase64 = await getJarvisAudio(responseText);
+        const audioBase64 = await getKyrosAudio(responseText);
         if (audioBase64) {
           await playPCM(audioBase64);
         }
@@ -417,18 +462,18 @@ export default function App() {
         }
       }, 1500);
     } else {
-      responseText = await getJarvisResponse(finalTranscript, messagesRef.current);
+      responseText = await getKyrosResponse(finalTranscript, messagesRef.current);
       
       const actionMatch = responseText.match(/ACTION:[\w:_.]+/g);
       const cleanResponse = responseText.replace(/ACTION:[\w:_.]+/g, "").replace(/UI:[\w:_.]+/g, "").trim();
 
-      setMessages((prev) => [...prev, { id: Date.now().toString() + "-j", sender: "jarvis", text: cleanResponse }]);
+      setMessages((prev) => [...prev, { id: Date.now().toString() + "-j", sender: "kyros", text: cleanResponse }]);
       
       parseUICommands(responseText);
 
       if (!isMuted) {
         setAppState("speaking");
-        const audioBase64 = await getJarvisAudio(responseText);
+        const audioBase64 = await getKyrosAudio(responseText);
         if (audioBase64) {
           await playPCM(audioBase64);
         }
@@ -452,11 +497,11 @@ export default function App() {
         liveSessionRef.current = null;
       }
       setAppState("idle");
-      resetJarvisSession();
+      resetKyrosSession();
     } else {
       try {
         setIsSessionActive(true);
-        resetJarvisSession();
+        resetKyrosSession();
         
         const session = new LiveSessionManager();
         session.isMuted = isMuted;
@@ -469,6 +514,11 @@ export default function App() {
         session.onMessage = (sender, text) => {
           setMessages((prev) => [...prev, { id: Date.now().toString() + "-" + sender, sender, text }]);
           parseUICommands(text);
+
+          // Wake Word Detection
+          if (sender === "user" && (text.toLowerCase().includes("kyros") || text.toLowerCase().includes("hey kyros"))) {
+            console.log("Wake word detected in transcript");
+          }
         };
         
         session.onCommand = (url) => {
@@ -498,7 +548,7 @@ export default function App() {
 
   const handleLogin = (name: string) => {
     setUser(name);
-    localStorage.setItem("jarvis_user", name);
+    localStorage.setItem("kyros_user", name);
   };
 
   if (!user) {
@@ -518,7 +568,7 @@ export default function App() {
             <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center border border-cyan-400 glow-border">
               <Activity className="text-cyan-400" size={16} />
             </div>
-            <h1 className="text-xl font-display font-bold tracking-[0.2em] text-cyan-400 glow-text">JARVIS SYSTEM</h1>
+            <h1 className="text-xl font-display font-bold tracking-[0.2em] text-cyan-400 glow-text">KYROS SYSTEM</h1>
           </div>
           <div className="text-[10px] font-mono text-cyan-500/60 ml-11 uppercase leading-none border-l border-cyan-400/20 pl-2">
             BIO-RECOGNITION: {user} // AUTH_LVL: 5
@@ -532,7 +582,7 @@ export default function App() {
       </header>
 
       {/* Main Content Grid */}
-      <main className="flex-1 p-4 md:p-6 z-10 overflow-hidden min-h-0 relative">
+      <main className="flex-1 p-2 md:p-6 z-10 overflow-hidden min-h-0 relative">
         <AnimatePresence mode="wait">
           {uiMode === "voice" ? (
             <motion.div 
@@ -540,10 +590,10 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.05 }}
-              className="h-full grid grid-cols-1 md:grid-cols-12 gap-4"
+              className="h-full grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4"
             >
-              {/* Sidebar Diagnostics */}
-              <div className="md:col-span-3 flex flex-col gap-4 overflow-y-auto scrollbar-hide min-h-0">
+              {/* Sidebar Diagnostics - Hidden on small mobile in voice mode if preferred */}
+              <div className="md:col-span-3 flex flex-col gap-4 overflow-y-auto scrollbar-hide min-h-0 order-2 md:order-1">
                 <DataCard title="Meteorological" icon={Cloud}>
                   {weather ? (
                     <div className="flex flex-col gap-4 text-xs font-mono">
@@ -666,7 +716,7 @@ export default function App() {
                         {m.sender === "user" ? <User size={8} /> : <Zap size={8} className="text-cyan-400" />}
                         {m.sender} // {new Date().toLocaleTimeString()}
                       </div>
-                      <div className={`max-w-[85%] p-4 rounded-lg font-mono text-sm leading-relaxed ${
+                      <div className={`max-w-[90%] md:max-w-[85%] p-3 md:p-4 rounded-lg font-mono text-xs md:text-sm leading-relaxed ${
                         m.sender === "user" 
                           ? "bg-cyan-500/10 border border-cyan-500/30 text-cyan-50" 
                           : "bg-white/5 border border-white/10 text-cyan-100 shadow-[inset_0_0_20px_rgba(255,255,255,0.02)]"
@@ -676,7 +726,7 @@ export default function App() {
                           <div className="mt-4 rounded-lg overflow-hidden border border-cyan-400/30 shadow-[0_0_20px_rgba(0,242,255,0.1)]">
                             <img 
                               src={m.imageUrl} 
-                              alt="Generated by JARVIS" 
+                              alt="Generated by Kyros" 
                               className="w-full h-auto object-cover"
                               referrerPolicy="no-referrer"
                             />

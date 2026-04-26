@@ -4,6 +4,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { exec } from "child_process";
 import fs from "fs/promises";
+import axios from "axios";
+import { convert } from "html-to-text";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,49 +19,99 @@ async function startServer() {
   // --- LOCAL AUTOMATION API ENDPOINTS ---
 
   /**
+   * Universal Automation Command (Keyboard/Mouse/Shell)
+   */
+  app.post("/api/automate/command", (req, res) => {
+    const { cmd, type } = req.body;
+    
+    // Safety check for critical commands
+    if (cmd.includes("format") || cmd.includes("rm -rf") || cmd.includes("del /s")) {
+      return res.status(403).json({ status: "error", message: "Restricted command pattern." });
+    }
+
+    // On Windows, we can use Powershell for advanced automation (Cursor, keys)
+    let finalCmd = cmd;
+    if (type === "powershell") {
+      finalCmd = `powershell -Command "${cmd.replace(/"/g, '`"')}"`;
+    }
+
+    exec(finalCmd, (error) => {
+      if (error) {
+        return res.status(500).json({ status: "error", message: error.message });
+      }
+      res.json({ status: "success" });
+    });
+  });
+
+  /**
+   * Web Scraper for AI Context
+   */
+  app.post("/api/scrape", async (req, res) => {
+    const { url } = req.body;
+    try {
+      const response = await axios.get(url, { 
+        headers: { "User-Agent": "Mozilla/5.0 JARVIS/1.0" },
+        timeout: 5000 
+      });
+      const text = convert(response.data, {
+        wordwrap: 130,
+        selectors: [
+          { selector: 'nav', format: 'skip' },
+          { selector: 'footer', format: 'skip' },
+          { selector: 'script', format: 'skip' },
+          { selector: 'style', format: 'skip' }
+        ]
+      });
+      res.json({ status: "success", content: text.substring(0, 10000) });
+    } catch (err: any) {
+      res.status(500).json({ status: "error", message: "Access to the digital stream was blocked, sir." });
+    }
+  });
+
+  /**
    * Launch a local application
-   * Note: On a real PC, this uses 'exec' to run system commands.
    */
   app.post("/api/automate/launch", (req, res) => {
     const { appName } = req.body;
     console.log(`[JARVIS] Attempting to launch: ${appName}`);
     
-    // Command mapping for common apps (Windows examples)
     const commands: Record<string, string> = {
       chrome: "start chrome",
       notepad: "notepad",
       calculator: "calc",
       explorer: "explorer",
       vscode: "code",
+      spotify: "start spotify",
+      discord: "start discord",
     };
 
-    const cmd = commands[appName.toLowerCase()] || appName;
+    const cmd = commands[appName.toLowerCase()] || `start ${appName}`;
     
-    // EXECUTION: This only works when running locally on a PC
     exec(cmd, (error) => {
       if (error) {
-        console.error(`Execution error: ${error}`);
         return res.status(500).json({ status: "error", message: `System denied access to ${appName}` });
       }
       res.json({ status: "success", message: `${appName} initialized.` });
     });
   });
 
-  /**
-   * Filesystem Management
-   */
   app.post("/api/automate/file", async (req, res) => {
     const { action, fileName, content } = req.body;
-    const desktopPath = path.join(process.env.USERPROFILE || process.env.HOME || "", "Desktop", fileName);
+    const homeDir = process.env.USERPROFILE || process.env.HOME || "";
+    const filePath = path.join(homeDir, "Desktop", fileName);
 
     try {
       if (action === "create") {
-        await fs.writeFile(desktopPath, content || "");
-        return res.json({ status: "success", message: `File ${fileName} manifested on Desktop.` });
+        await fs.writeFile(filePath, content || "");
+        return res.json({ status: "success", message: `File manifested at ${filePath}` });
       }
-      res.status(400).json({ status: "error", message: "Unknown file action." });
+      if (action === "read") {
+        const data = await fs.readFile(filePath, "utf-8");
+        return res.json({ status: "success", content: data });
+      }
+      res.status(400).json({ status: "error", message: "Invalid action." });
     } catch (err) {
-      res.status(500).json({ status: "error", message: "Filesystem access restricted." });
+      res.status(500).json({ status: "error", message: "Protocol failure: Filesystem access restricted." });
     }
   });
 

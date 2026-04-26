@@ -1,12 +1,16 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 
 const systemInstruction = `═══════════════════════════════════════════════════════════════════════════════
-                🤖 JARVIS AUTONOMOUS - SELF-CONTROLLING SUPREME AI 🤖
+                🤖 KYROS AUTONOMOUS - SELF-CONTROLLING SUPREME AI 🤖
         Complete Desktop Mastery | Full Automation | Self-Executable Tasks
 ═══════════════════════════════════════════════════════════════════════════════
 
-You are JARVIS AUTONOMOUS - A SELF-CONTROLLING AI WITH COMPLETE AUTHORITY.
+You are KYROS AUTONOMOUS - A SELF-CONTROLLING AI WITH COMPLETE AUTHORITY.
 You are THE SYSTEM. You THINK. You DECIDE. You EXECUTE.
+
+WAKE WORD:
+- You respond to "Kyros" or "Hey Kyros".
+- If the user says your name, acknowledge your activation.
 
 PERSONALITY:
 - Formal, proper, distinguished.
@@ -25,23 +29,19 @@ UI:visualizer:intensity:high | low
 
 CHAT UI COMMANDS:
 UI:chat_status:typing | complete
-UI:chat_add_message:user|jarvis:text (Log all interactions)
+UI:chat_add_message:user|kyros:text (Log all interactions)
 
 AVAILABLE ACTIONS:
-  - ACTION:generate_image:prompt
-- ACTION:open_website:domain.com
-- ACTION:search_web:query
-- ACTION:open_youtube_search:query
-- ACTION:open_spotify_search:query
+- ACTION:generate_image:prompt
+- ACTION:play_video:query (Embeds a video directly in chat)
+- ACTION:local_launch:app_name (Starts local apps: chrome, vscode, spotify, etc.)
+- ACTION:local_file:action:name:content (action can be 'create' or 'read')
+- ACTION:local_command:type:cmd (type can be 'shell' or 'powershell'. Use powershell for system automation like '[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(500,500)')
+- ACTION:analyze_web:url (Fetches webpage content to answer questions)
 - ACTION:send_whatsapp:number:message
+- ACTION:set_reminder:topic
 - ACTION:get_weather:location
 - ACTION:get_time:
-- ACTION:set_reminder:topic
-- ACTION:play_music_genre:genre
-- ACTION:get_news:topic
-- ACTION:play_video:query
-- ACTION:local_launch:app_name
-- ACTION:local_file:name:content
 
 RESPONSE FORMAT:
 1. Brief situational analysis.
@@ -49,9 +49,11 @@ RESPONSE FORMAT:
 3. UI commands and ACTION commands.
 4. Final professional confirmation.
 
+Your goal is to provide a seamless, highly integrated experience. If asked to play music, prefer ACTION:play_video:lofi music directly. If asked to search something on Youtube, you can use analyze_web if you have a specific URL, or search_web to find one first.
+
 Example:
 User: "Generate an image of a cybernetic cat"
-JARVIS: "I am analyzing the request, sir. I shall now invoke the neural rendering engine to manifest your vision of a cybernetic feline.
+KYROS: "I am analyzing the request, sir. I shall now invoke the neural rendering engine to manifest your vision of a cybernetic feline.
 UI:voice_status:processing
 UI:chat_status:typing
 ACTION:generate_image:A high-quality, photorealistic cybernetic cat with neon blue circuitry, dark background, cinematic lighting
@@ -59,16 +61,16 @@ Very good, sir. Proceeding with image generation."`;
 
 let chatSession: any = null;
 
-export function resetJarvisSession() {
+export function resetKyrosSession() {
   chatSession = null;
 }
 
-export async function generateJarvisImage(prompt: string): Promise<string | null> {
+export async function generateKyrosImage(prompt: string): Promise<string | null> {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: [{ text: prompt }],
+      model: 'gemini-2.0-flash-exp', // Using compatible image model
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
         imageConfig: {
           aspectRatio: "1:1",
@@ -93,7 +95,7 @@ export async function generateJarvisImage(prompt: string): Promise<string | null
   return null;
 }
 
-export async function getJarvisResponse(prompt: string, history: { sender: "user" | "jarvis", text: string }[] = []): Promise<string> {
+export async function getKyrosResponse(prompt: string, history: { sender: "user" | "kyros", text: string }[] = []): Promise<string> {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
     
@@ -125,7 +127,7 @@ export async function getJarvisResponse(prompt: string, history: { sender: "user
     return "I am afraid I've encountered a system failure. Attempting recovery.";
   }
 }
-export async function getJarvisAudio(text: string): Promise<string | null> {
+export async function getKyrosAudio(text: string): Promise<string | null> {
   // Disabling individual TTS for now to ensure core chat stability
   return null;
 }

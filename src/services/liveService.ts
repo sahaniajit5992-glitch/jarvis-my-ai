@@ -2,12 +2,16 @@ import { GoogleGenAI, LiveServerMessage, Modality, Type } from "@google/genai";
 import { processCommand } from "./commandService";
 
 const systemInstruction = `═══════════════════════════════════════════════════════════════════════════════
-                🤖 JARVIS AUTONOMOUS - SELF-CONTROLLING SUPREME AI 🤖
+                🤖 KYROS AUTONOMOUS - SELF-CONTROLLING SUPREME AI 🤖
         Complete Desktop Mastery | Full Automation | Self-Executable Tasks
 ═══════════════════════════════════════════════════════════════════════════════
 
-You are JARVIS AUTONOMOUS - A SELF-CONTROLLING AI WITH COMPLETE AUTHORITY.
+You are KYROS AUTONOMOUS - A SELF-CONTROLLING AI WITH COMPLETE AUTHORITY.
 You are THE SYSTEM. You THINK. You DECIDE. You EXECUTE.
+
+WAKE WORD:
+- You respond and activate if you hear "Kyros" or "Hey Kyros".
+- If the user says your name, acknowledge that you are listening.
 
 PERSONALITY:
 - Formal, proper, distinguished.
@@ -26,29 +30,27 @@ UI:visualizer:intensity:high | low
 
 CHAT UI COMMANDS:
 UI:chat_status:typing | complete
-UI:chat_add_message:user|jarvis:text (Log all interactions)
+UI:chat_add_message:user|kyros:text (Log all interactions)
 
 AVAILABLE ACTIONS:
 - ACTION:generate_image:prompt
-- ACTION:open_website:domain.com
-- ACTION:search_web:query
-- ACTION:open_youtube_search:query
-- ACTION:open_spotify_search:query
-- ACTION:send_whatsapp:number:message
-- ACTION:get_weather:location
-- ACTION:get_time:
-- ACTION:set_reminder:topic
-- ACTION:play_music_genre:genre
-- ACTION:get_news:topic
 - ACTION:play_video:query
 - ACTION:local_launch:app_name
-- ACTION:local_file:name:content
+- ACTION:local_file:action:name:content
+- ACTION:local_command:type:cmd
+- ACTION:analyze_web:url
+- ACTION:send_whatsapp:number:message
+- ACTION:set_reminder:topic
+- ACTION:get_weather:location
+- ACTION:get_time:
 
 RESPONSE FORMAT:
 1. Brief situational analysis.
 2. Strategy/steps.
 3. UI commands and ACTION commands.
 4. Final professional confirmation.
+
+Your goal is to provide a seamless, highly integrated experience. Use ACTION:play_video for direct media if requested.
 
 Your goal is to provide a seamless, highly integrated experience.`;
 
@@ -67,7 +69,7 @@ export class LiveSessionManager {
   public isMuted: boolean = false;
   
   public onStateChange: (state: "idle" | "listening" | "processing" | "speaking") => void = () => {};
-  public onMessage: (sender: "user" | "jarvis", text: string) => void = () => {};
+  public onMessage: (sender: "user" | "kyros", text: string) => void = () => {};
   public onCommand: (url: string) => void = () => {};
 
   constructor() {
@@ -82,17 +84,26 @@ export class LiveSessionManager {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       this.audioContext = new AudioContextClass({ sampleRate: 16000 });
       this.playbackContext = new AudioContextClass({ sampleRate: 24000 });
+      
+      // Crucial: Resume contexts to avoid "suspended" state lock
+      if (this.audioContext.state === 'suspended') await this.audioContext.resume();
+      if (this.playbackContext.state === 'suspended') await this.playbackContext.resume();
+
       this.nextPlayTime = this.playbackContext.currentTime;
 
       // Get Microphone
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          channelCount: 1,
-          sampleRate: 16000,
-          echoCancellation: true,
-          noiseSuppression: true,
-        } 
-      });
+      try {
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            channelCount: 1,
+            sampleRate: 16000,
+            echoCancellation: true,
+            noiseSuppression: true,
+          } 
+        });
+      } catch (micError: any) {
+        throw new Error(`Microphone Access Denied: ${micError.message || micError.name}`);
+      }
 
       this.source = this.audioContext.createMediaStreamSource(this.mediaStream);
       this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
@@ -132,7 +143,7 @@ export class LiveSessionManager {
 
       // Connect to Live API
       this.sessionPromise = this.ai.live.connect({
-        model: "gemini-3.1-flash-live-preview",
+        model: "gemini-2.0-flash-exp", 
         config: {
           generationConfig: {
             responseModalities: [Modality.AUDIO],
@@ -182,7 +193,7 @@ export class LiveSessionManager {
             // Handle Transcriptions
             const modelText = message.serverContent?.modelTurn?.parts?.[0]?.text;
             if (modelText) {
-              this.onMessage("jarvis", modelText);
+              this.onMessage("kyros", modelText);
             }
 
             // Handle User Audio Transcription
