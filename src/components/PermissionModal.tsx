@@ -22,7 +22,7 @@ export default function PermissionModal({ onClose }: Props) {
         
         <h2 className="text-2xl font-serif font-medium text-white mb-3 tracking-wide">Communication Offline</h2>
         <p className="text-white/60 text-sm mb-6 leading-relaxed">
-          Primary audio input is currently restricted. JARVIS requires microphone access to process your verbal commands.
+          Primary audio input is currently restricted. Kyros requires microphone access to process your verbal commands.
         </p>
         
         <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-left w-full mb-8">

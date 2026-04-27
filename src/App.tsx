@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Cloud, Cpu, Terminal as Terminals, Activity, User, Shield, Zap, Globe, Sun, CloudRain, Wind } from "lucide-react";
+import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Cloud, Cpu, Terminal as Terminals, Activity, User, Shield, Zap, Globe, Sun, CloudRain, Wind, Settings } from "lucide-react";
 import { getKyrosResponse, getKyrosAudio, resetKyrosSession, generateKyrosImage } from "./services/geminiService";
 import { processCommand } from "./services/commandService";
 import { LiveSessionManager } from "./services/liveService";
 import Visualizer from "./components/Visualizer";
 import PermissionModal from "./components/PermissionModal";
+import SettingsModal from "./components/SettingsModal";
+import SystemBar from "./components/SystemBar";
 import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -115,8 +117,10 @@ export default function App() {
   const [user, setUser] = useState<string | null>(() => localStorage.getItem("kyros_user"));
   const [appState, setAppState] = useState<AppState>("idle");
   const [uiMode, setUiMode] = useState<"voice" | "chat">("voice");
-  const [vizColor, setVizColor] = useState<string | undefined>();
-  const [vizIntensity, setVizIntensity] = useState<"high" | "low" | undefined>();
+  const [showSettings, setShowSettings] = useState(false);
+  const [vizColor, setVizColor] = useState<string>(() => localStorage.getItem("kyros_viz_color") || "#00f2ff");
+  const [vizIntensity, setVizIntensity] = useState<"high" | "low">(() => (localStorage.getItem("kyros_viz_intensity") as "high" | "low") || "low");
+  const [vizMode, setVizMode] = useState<"classic" | "circular" | "spectrum">("circular");
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     const saved = localStorage.getItem("kyros_chat_history");
     if (saved) {
@@ -235,10 +239,11 @@ export default function App() {
             }
             break;
           case "visualizer":
-            // Check for sub-commands like color, intensity
+            // Check for sub-commands like color, intensity, mode
             const subparts = line.split(":");
             if (subparts[2] === "color") setVizColor(subparts[3]);
             if (subparts[2] === "intensity") setVizIntensity(subparts[3] as any);
+            if (subparts[2] === "type") setVizMode(subparts[3] as any);
             break;
           case "chat_status":
             // could be used for typing indicators, but we handle it via appState mostly
@@ -320,6 +325,49 @@ export default function App() {
       case "get_news":
         if (params[0]) {
           window.open(`https://news.google.com/search?q=${encodeURIComponent(params[0])}`, "_blank");
+        }
+        break;
+      case "system_status":
+        fetch("/api/system/status")
+          .then(res => res.json())
+          .then(data => {
+            if (data.status === "success") {
+              const { cpu, memory, platform, uptime } = data.data;
+              setMessages(prev => [...prev, {
+                id: Date.now().toString() + "-sys",
+                sender: "kyros",
+                text: `System Status Analysis:\n- Platform: ${platform}\n- CPU Load: ${cpu}%\n- Memory Usage: ${memory}%\n- Uptime: ${uptime}`
+              }]);
+            }
+          }).catch(console.error);
+        break;
+      case "browser_automation":
+        if (params[0]) {
+          const action = params[0];
+          const queryOrUrl = params[1];
+          fetch("/api/automate/browser", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, search: queryOrUrl, url: queryOrUrl }),
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (action === "search_youtube" && data.videoUrl) {
+              setMessages(prev => [...prev, {
+                id: Date.now().toString() + "-vid",
+                sender: "kyros",
+                text: `I've successfully navigated via automation. Here is the primary video stream, sir.`,
+                videoUrl: data.videoUrl.replace("watch?v=", "embed/")
+              }]);
+            } else if (action === "screenshot" && data.screenshot) {
+              setMessages(prev => [...prev, {
+                id: Date.now().toString() + "-shot",
+                sender: "kyros",
+                text: `Digital snapshot captured of ${queryOrUrl}, sir.`,
+                imageUrl: `data:image/png;base64,${data.screenshot}`
+              }]);
+            }
+          }).catch(console.error);
         }
         break;
       case "local_launch":
@@ -551,6 +599,20 @@ export default function App() {
     localStorage.setItem("kyros_user", name);
   };
 
+  const handleSaveSettings = (color: string, intensity: "high" | "low") => {
+    setVizColor(color);
+    setVizIntensity(intensity);
+    localStorage.setItem("kyros_viz_color", color);
+    localStorage.setItem("kyros_viz_intensity", intensity);
+    document.documentElement.style.setProperty('--primary-color', color);
+    document.documentElement.style.setProperty('--primary-glow', `${color}66`); // 40% opacity
+  };
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--primary-color', vizColor);
+    document.documentElement.style.setProperty('--primary-glow', `${vizColor}66`);
+  }, [vizColor]);
+
   if (!user) {
     return <LoginScreen onLogin={handleLogin} />;
   }
@@ -560,8 +622,17 @@ export default function App() {
       <div className="scanline" />
       
       {showPermissionModal && <PermissionModal onClose={() => setShowPermissionModal(false)} />}
+      {showSettings && (
+        <SettingsModal 
+          onClose={() => setShowSettings(false)} 
+          onSave={handleSaveSettings}
+          initialColor={vizColor}
+          initialIntensity={vizIntensity}
+        />
+      )}
 
       {/* Header */}
+      <SystemBar />
       <header className="glass-panel w-[95%] mx-auto mt-4 px-6 py-3 flex justify-between items-center z-20 rounded-lg shrink-0">
         <div className="flex flex-col">
           <div className="flex items-center gap-3">
@@ -575,9 +646,18 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex flex-col items-end font-mono text-cyan-400">
-          <div className="text-xl tracking-tighter">{time.toLocaleTimeString([], { hour12: false })}</div>
-          <div className="text-[10px] opacity-60"> // {time.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setShowSettings(true)}
+            className="p-2 hover:bg-white/5 rounded-full transition-colors text-cyan-400 group relative"
+          >
+            <Settings className="group-hover:rotate-90 transition-transform duration-500" size={20} />
+            <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-[8px] font-mono whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest bg-black/80 px-2 py-1 rounded border border-cyan-500/20">System Config</span>
+          </button>
+          <div className="flex flex-col items-end font-mono text-cyan-400">
+            <div className="text-xl tracking-tighter">{time.toLocaleTimeString([], { hour12: false })}</div>
+            <div className="text-[10px] opacity-60"> // {time.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+          </div>
         </div>
       </header>
 
@@ -627,7 +707,7 @@ export default function App() {
 
               {/* Main Visualizer */}
               <div className="md:col-span-6 flex flex-col items-center justify-center relative min-h-0">
-                <Visualizer state={appState} colorOverride={vizColor} intensityOverride={vizIntensity} />
+                <Visualizer state={appState} colorOverride={vizColor} intensityOverride={vizIntensity} mode={vizMode} />
                 
                 <div className="mt-12 flex items-center gap-8 z-20">
                   <motion.button

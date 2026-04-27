@@ -7,9 +7,10 @@ interface VisualizerProps {
   state: VisualizerState;
   colorOverride?: string;
   intensityOverride?: "high" | "low";
+  mode?: "classic" | "circular" | "spectrum";
 }
 
-export default function Visualizer({ state, colorOverride, intensityOverride }: VisualizerProps) {
+export default function Visualizer({ state, colorOverride, intensityOverride, mode = "circular" }: VisualizerProps) {
   const getTheme = () => {
     const base = (() => {
       switch (state) {
@@ -83,7 +84,7 @@ export default function Visualizer({ state, colorOverride, intensityOverride }: 
             className="absolute w-24 h-24 rounded-full bg-cyan-400/10 blur-xl"
           />
           <span className="font-display font-black tracking-[0.3em] text-cyan-400 glow-text text-xl z-20">
-            JARVIS
+            KYROS
           </span>
         </div>
       </motion.div>

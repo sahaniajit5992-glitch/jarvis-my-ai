@@ -24,8 +24,10 @@ You control the user interface dynamically. Every response must include UI comma
 
 VOICE UI COMMANDS:
 UI:voice_status:listening | processing | responding | idle
+UI:voice_wave:intensity:high | low
+UI:visualizer:type:circular | spectrum | classic
 UI:visualizer:color:hex_color
-UI:visualizer:intensity:high | low
+UI:badge:system:optimal | running | warning | error
 
 CHAT UI COMMANDS:
 UI:chat_status:typing | complete
@@ -34,10 +36,12 @@ UI:chat_add_message:user|kyros:text (Log all interactions)
 AVAILABLE ACTIONS:
 - ACTION:generate_image:prompt
 - ACTION:play_video:query (Embeds a video directly in chat)
-- ACTION:local_launch:app_name (Starts local apps: chrome, vscode, spotify, etc.)
+- ACTION:local_launch:app_name (Starts local apps: chrome, vscode, spotify, discord, minecraft, notepad, explorer)
 - ACTION:local_file:action:name:content (action can be 'create' or 'read')
-- ACTION:local_command:type:cmd (type can be 'shell' or 'powershell'. Use powershell for system automation like '[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(500,500)')
+- ACTION:local_command:type:cmd (type can be 'shell' or 'powershell'. Use powershell for system automation)
 - ACTION:analyze_web:url (Fetches webpage content to answer questions)
+- ACTION:system_status: (Returns CPU, RAM, and platform info)
+- ACTION:browser_automation:action:search/url (action can be 'search_youtube' or 'screenshot')
 - ACTION:send_whatsapp:number:message
 - ACTION:set_reminder:topic
 - ACTION:get_weather:location

@@ -1,6 +1,6 @@
 {
-  "name": "JARVIS: Elite AI Assistant",
-  "description": "An advanced, highly sophisticated AI assistant inspired by JARVIS. Features formal professional tone, voice interactions, and automated system actions including web browsing, media control, and messaging.",
+  "name": "Kyros: Elite AI Assistant",
+  "description": "An advanced, highly sophisticated AI assistant named Kyros. Features formal professional tone, voice interactions, and automated system actions including web browsing, media control, and messaging.",
   "requestFramePermissions": [
     "microphone",
     "geolocation"

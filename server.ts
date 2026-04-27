@@ -6,6 +6,8 @@ import { exec } from "child_process";
 import fs from "fs/promises";
 import axios from "axios";
 import { convert } from "html-to-text";
+import os from "os";
+import puppeteer from "puppeteer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,13 +46,76 @@ async function startServer() {
   });
 
   /**
+   * System Status (CPU, RAM, Battery)
+   */
+  app.get("/api/system/status", async (req, res) => {
+    try {
+      const cpuUsage = os.loadavg()[0];
+      const totalMem = os.totalmem();
+      const freeMem = os.freemem();
+      const memUsage = ((totalMem - freeMem) / totalMem) * 100;
+      
+      res.json({
+        status: "success",
+        data: {
+          cpu: cpuUsage.toFixed(2),
+          memory: memUsage.toFixed(2),
+          platform: os.platform(),
+          uptime: (os.uptime() / 3600).toFixed(2) + " hours",
+          hostname: os.hostname()
+        }
+      });
+    } catch (err) {
+      res.status(500).json({ status: "error", message: "Unable to retrieve system bios, sir." });
+    }
+  });
+
+  /**
+   * Browser Automation (Puppeteer)
+   */
+  app.post("/api/automate/browser", async (req, res) => {
+    const { action, url, search } = req.body;
+    let browser;
+    try {
+      browser = await puppeteer.launch({ 
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
+      const page = await browser.newPage();
+      
+      if (action === "search_youtube") {
+        await page.goto(`https://www.youtube.com/results?search_query=${encodeURIComponent(search)}`);
+        const firstVideo = await page.evaluate(() => {
+          const first = document.querySelector('a#video-title');
+          return first ? (first as any).href : null;
+        });
+        await browser.close();
+        return res.json({ status: "success", videoUrl: firstVideo });
+      }
+
+      if (action === "screenshot") {
+        await page.goto(url);
+        const screenshot = await page.screenshot({ encoding: "base64" });
+        await browser.close();
+        return res.json({ status: "success", screenshot });
+      }
+
+      await browser.close();
+      res.status(400).json({ status: "error", message: "Invalid browser action." });
+    } catch (err: any) {
+      if (browser) await browser.close();
+      res.status(500).json({ status: "error", message: err.message });
+    }
+  });
+
+  /**
    * Web Scraper for AI Context
    */
   app.post("/api/scrape", async (req, res) => {
     const { url } = req.body;
     try {
       const response = await axios.get(url, { 
-        headers: { "User-Agent": "Mozilla/5.0 JARVIS/1.0" },
+        headers: { "User-Agent": "Mozilla/5.0 Kyros/1.0" },
         timeout: 5000 
       });
       const text = convert(response.data, {
@@ -73,7 +138,7 @@ async function startServer() {
    */
   app.post("/api/automate/launch", (req, res) => {
     const { appName } = req.body;
-    console.log(`[JARVIS] Attempting to launch: ${appName}`);
+    console.log(`[Kyros] Attempting to launch: ${appName}`);
     
     const commands: Record<string, string> = {
       chrome: "start chrome",
@@ -132,7 +197,7 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`══════════════════════════════════════════════`);
-    console.log(`🤖 JARVIS BACKEND: ONLINE`);
+    console.log(`🤖 Kyros BACKEND: ONLINE`);
     console.log(`🔗 LOCAL BRIDGE: http://localhost:${PORT}`);
     console.log(`══════════════════════════════════════════════`);
   });

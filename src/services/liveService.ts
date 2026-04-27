@@ -25,8 +25,10 @@ You control the user interface dynamically. Every response must include UI comma
 
 VOICE UI COMMANDS:
 UI:voice_status:listening | processing | responding | idle
+UI:voice_wave:intensity:high | low
+UI:visualizer:type:circular | spectrum | classic
 UI:visualizer:color:hex_color
-UI:visualizer:intensity:high | low
+UI:badge:system:optimal | running | warning | error
 
 CHAT UI COMMANDS:
 UI:chat_status:typing | complete
@@ -39,6 +41,8 @@ AVAILABLE ACTIONS:
 - ACTION:local_file:action:name:content
 - ACTION:local_command:type:cmd
 - ACTION:analyze_web:url
+- ACTION:system_status:
+- ACTION:browser_automation:action:search/url
 - ACTION:send_whatsapp:number:message
 - ACTION:set_reminder:topic
 - ACTION:get_weather:location
@@ -87,7 +91,9 @@ export class LiveSessionManager {
       
       // Crucial: Resume contexts to avoid "suspended" state lock
       if (this.audioContext.state === 'suspended') await this.audioContext.resume();
-      if (this.playbackContext.state === 'suspended') await this.playbackContext.resume();
+      if (this.playbackContext && this.playbackContext.state === 'suspended') await this.playbackContext.resume();
+
+      if (!this.audioContext || !this.playbackContext) return;
 
       this.nextPlayTime = this.playbackContext.currentTime;
 
@@ -105,11 +111,13 @@ export class LiveSessionManager {
         throw new Error(`Microphone Access Denied: ${micError.message || micError.name}`);
       }
 
+      if (!this.audioContext || !this.mediaStream) return;
+
       this.source = this.audioContext.createMediaStreamSource(this.mediaStream);
       this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
 
       this.processor.onaudioprocess = (e) => {
-        if (!this.sessionPromise) return;
+        if (!this.sessionPromise || !this.audioContext) return;
         const inputData = e.inputBuffer.getChannelData(0);
         const pcm16 = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {
