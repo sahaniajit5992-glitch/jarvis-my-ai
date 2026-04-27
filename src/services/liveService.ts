@@ -160,7 +160,7 @@ export class LiveSessionManager {
 
       // Connect to Live API
       this.sessionPromise = this.ai.live.connect({
-        model: "gemini-2.0-flash-exp", 
+        model: "gemini-2.0-flash", 
         config: {
           generationConfig: {
             responseModalities: [Modality.AUDIO],
