@@ -213,6 +213,7 @@ export default function App() {
   const [showTextInput, setShowTextInput] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
   const [isSessionActive, setIsSessionActive] = useState(false);
 
   const liveSessionRef = useRef<LiveSessionManager | null>(null);
@@ -576,8 +577,9 @@ export default function App() {
         };
 
         await session.start();
-      } catch (e) {
+      } catch (e: any) {
         console.error("Failed to start session", e);
+        setMicError(e.message || String(e));
         setShowPermissionModal(true);
         setIsSessionActive(false);
         setAppState("idle");
@@ -621,7 +623,15 @@ export default function App() {
     <div className="h-[100dvh] w-screen bg-[#0a0a0c] text-white flex flex-col font-sans relative overflow-hidden m-0 p-0">
       <div className="scanline" />
       
-      {showPermissionModal && <PermissionModal onClose={() => setShowPermissionModal(false)} />}
+      {showPermissionModal && (
+        <PermissionModal 
+          error={micError} 
+          onClose={() => {
+            setShowPermissionModal(false);
+            setMicError(null);
+          }} 
+        />
+      )}
       {showSettings && (
         <SettingsModal 
           onClose={() => setShowSettings(false)} 

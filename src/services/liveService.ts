@@ -84,16 +84,18 @@ export class LiveSessionManager {
     try {
       this.onStateChange("processing");
       
-      // Initialize Audio Contexts
+      // Initialize Audio Contexts only when starting
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) {
+        throw new Error("Web Audio API not supported in this browser.");
+      }
+
       this.audioContext = new AudioContextClass({ sampleRate: 16000 });
       this.playbackContext = new AudioContextClass({ sampleRate: 24000 });
       
       // Crucial: Resume contexts to avoid "suspended" state lock
       if (this.audioContext.state === 'suspended') await this.audioContext.resume();
-      if (this.playbackContext && this.playbackContext.state === 'suspended') await this.playbackContext.resume();
-
-      if (!this.audioContext || !this.playbackContext) return;
+      if (this.playbackContext.state === 'suspended') await this.playbackContext.resume();
 
       this.nextPlayTime = this.playbackContext.currentTime;
 
@@ -108,10 +110,17 @@ export class LiveSessionManager {
           } 
         });
       } catch (micError: any) {
-        throw new Error(`Microphone Access Denied: ${micError.message || micError.name}`);
+        // Detailed mic error handling
+        let msg = "Microphone Access Denied";
+        if (micError.name === 'NotAllowedError') msg = "Microphone permission was denied. Please enable it in browser settings.";
+        else if (micError.name === 'NotFoundError') msg = "No microphone found. Please connect an audio input device.";
+        else msg = micError.message || micError.name;
+        throw new Error(msg);
       }
 
-      if (!this.audioContext || !this.mediaStream) return;
+      if (!this.audioContext || !this.mediaStream) {
+        throw new Error("Audio initialization failed internally.");
+      }
 
       this.source = this.audioContext.createMediaStreamSource(this.mediaStream);
       this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
@@ -304,39 +313,47 @@ export class LiveSessionManager {
 
   private stopPlayback() {
     if (this.playbackContext) {
-      this.playbackContext.close();
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      this.playbackContext = new AudioContextClass({ sampleRate: 24000 });
-      this.nextPlayTime = this.playbackContext.currentTime;
+      try {
+        this.playbackContext.close().catch(() => {});
+      } catch (e) {}
+      this.playbackContext = null;
       this.isPlaying = false;
     }
   }
 
   stop() {
+    // Prevent double-stop logic issues
+    this.onStateChange("idle");
+    
     if (this.processor) {
-      this.processor.disconnect();
+      try { this.processor.disconnect(); } catch (e) {}
       this.processor = null;
     }
     if (this.source) {
-      this.source.disconnect();
+      try { this.source.disconnect(); } catch (e) {}
       this.source = null;
     }
     if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach(t => t.stop());
+      this.mediaStream.getTracks().forEach(t => {
+        try { t.stop(); } catch (e) {}
+      });
       this.mediaStream = null;
     }
     if (this.audioContext) {
-      this.audioContext.close();
+      try { this.audioContext.close().catch(() => {}); } catch (e) {}
       this.audioContext = null;
     }
+    
     this.stopPlayback();
     
     if (this.sessionPromise) {
-      this.sessionPromise.then(session => session.close()).catch(() => {});
+      this.sessionPromise.then(session => {
+        if (session && typeof session.close === 'function') {
+          session.close();
+        }
+      }).catch(() => {});
       this.sessionPromise = null;
     }
-    
-    this.onStateChange("idle");
   }
 
   sendText(text: string) {
