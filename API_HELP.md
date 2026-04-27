@@ -6,7 +6,7 @@ If you are seeing errors when testing your API key in PowerShell, use the follow
 Replace `YOUR_API_KEY` with your actual key. This command is a single line to avoid line-break errors in PowerShell.
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=YOUR_API_KEY" -ContentType "application/json" -Body '{"contents": [{"parts":[{"text": "Write a short poem about AI."}]}]}'
+Invoke-RestMethod -Method Post -Uri "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=YOUR_API_KEY" -ContentType "application/json" -Body '{"contents": [{"parts":[{"text": "Write a short poem about AI."}]}]}'
 ```
 
 ## 2. Using the Project Script

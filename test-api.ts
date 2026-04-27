@@ -25,7 +25,7 @@ async function testApi() {
     const ai = new GoogleGenAI({ apiKey });
     // Using a basic text model for simple verification
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
+      model: "gemini-3-flash-preview",
       contents: [{ role: "user", parts: [{ text: "Respond with 'Connected' if you can hear me." }] }]
     });
 

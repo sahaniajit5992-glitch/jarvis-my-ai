@@ -73,7 +73,7 @@ export async function generateKyrosImage(prompt: string): Promise<string | null>
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash', // Using compatible image model
+      model: 'gemini-2.5-flash-image', // Using compatible image model
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
         imageConfig: {
@@ -115,7 +115,7 @@ export async function getKyrosResponse(prompt: string, history: { sender: "user"
       });
 
       chatSession = ai.chats.create({
-        model: "gemini-1.5-flash", 
+        model: "gemini-3-flash-preview", 
         config: {
           systemInstruction,
         },
