@@ -214,6 +214,7 @@ export default function App() {
   const [textInput, setTextInput] = useState("");
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
+  const [isSecure, setIsSecure] = useState(true);
   const [isSessionActive, setIsSessionActive] = useState(false);
 
   const liveSessionRef = useRef<LiveSessionManager | null>(null);
@@ -538,6 +539,10 @@ export default function App() {
     }
   }, [isMuted, isSessionActive, executeAction]);
 
+  useEffect(() => {
+    setIsSecure(window.isSecureContext);
+  }, []);
+
   const toggleListening = async () => {
     if (isSessionActive) {
       setIsSessionActive(false);
@@ -626,6 +631,7 @@ export default function App() {
       {showPermissionModal && (
         <PermissionModal 
           error={micError} 
+          isSecure={isSecure}
           onClose={() => {
             setShowPermissionModal(false);
             setMicError(null);

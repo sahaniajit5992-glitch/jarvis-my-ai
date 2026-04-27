@@ -5,9 +5,10 @@ import { MicOff } from 'lucide-react';
 interface Props {
   onClose: () => void;
   error?: string | null;
+  isSecure?: boolean;
 }
 
-export default function PermissionModal({ onClose, error }: Props) {
+export default function PermissionModal({ onClose, error, isSecure }: Props) {
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4">
       <motion.div 
@@ -23,6 +24,13 @@ export default function PermissionModal({ onClose, error }: Props) {
         
         <h2 className="text-2xl font-display font-medium text-white mb-2 tracking-wide uppercase">Communication Restricted</h2>
         
+        {!isSecure && (
+          <div className="mb-4 px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <p className="text-[10px] font-mono text-amber-400 uppercase tracking-tighter italic">! SECURITY PROTOCOL ALERT !</p>
+            <p className="text-xs text-amber-300/80">Insecure Context Detected. Browsers disable microphone access unless using <strong>HTTPS</strong> or <strong>localhost</strong>.</p>
+          </div>
+        )}
+
         {error && (
           <div className="mb-4 px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
             <p className="text-[10px] font-mono text-red-400 uppercase tracking-tighter">System Error:</p>
