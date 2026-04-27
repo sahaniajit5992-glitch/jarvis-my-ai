@@ -5,12 +5,14 @@ import { processCommand } from "./services/commandService";
 import { LiveSessionManager } from "./services/liveService";
 import Visualizer from "./components/Visualizer";
 import PermissionModal from "./components/PermissionModal";
+import PermissionGate from "./components/PermissionGate";
 import SettingsModal from "./components/SettingsModal";
 import SystemBar from "./components/SystemBar";
 import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
 
 type AppState = "idle" | "listening" | "processing" | "speaking";
+type PermissionStateValue = "granted" | "denied" | "prompt";
 
 interface ChatMessage {
   id: string;
@@ -215,6 +217,9 @@ export default function App() {
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [isSecure, setIsSecure] = useState(true);
+  const [permissionsReady, setPermissionsReady] = useState(false);
+  const [micState, setMicState] = useState<PermissionStateValue>('prompt');
+  const [locState, setLocState] = useState<PermissionStateValue>('prompt');
   const [isSessionActive, setIsSessionActive] = useState(false);
 
   const liveSessionRef = useRef<LiveSessionManager | null>(null);
@@ -628,6 +633,16 @@ export default function App() {
     <div className="h-[100dvh] w-screen bg-[#0a0a0c] text-white flex flex-col font-sans relative overflow-hidden m-0 p-0">
       <div className="scanline" />
       
+      {!permissionsReady && (
+        <PermissionGate 
+          onAllGranted={() => setPermissionsReady(true)} 
+          onStateChange={(mic, loc) => {
+            setMicState(mic);
+            setLocState(loc);
+          }}
+        />
+      )}
+
       {showPermissionModal && (
         <PermissionModal 
           error={micError} 
@@ -754,6 +769,14 @@ export default function App() {
               <div className="md:col-span-3 flex flex-col gap-4 h-full">
                 <DataCard title="Sub-System Stats" icon={Shield}>
                    <div className="flex flex-col gap-2">
+                     <div className="flex justify-between items-center text-[10px] font-mono border-b border-cyan-500/5 pb-1">
+                       <span className="text-cyan-400/60">MIC_LINK</span>
+                       <span className={micState === 'granted' ? "text-green-400" : "text-amber-400"}>{micState.toUpperCase()}</span>
+                     </div>
+                     <div className="flex justify-between items-center text-[10px] font-mono border-b border-cyan-500/5 pb-1">
+                       <span className="text-cyan-400/60">LOC_SENS</span>
+                       <span className={locState === 'granted' ? "text-green-400" : "text-amber-400"}>{locState.toUpperCase()}</span>
+                     </div>
                      {['OS', 'NET', 'SEC', 'AI'].map(sys => (
                        <div key={sys} className="flex justify-between items-center text-[10px] font-mono border-b border-cyan-500/5 pb-1">
                          <span className="text-cyan-400/60">{sys}_MTRX</span>
