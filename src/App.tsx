@@ -432,6 +432,30 @@ export default function App() {
         }
         break;
       }
+      case "sendWhatsApp": {
+        const { recipient, message } = (action as any).args;
+        window.open(`https://web.whatsapp.com/send?phone=${recipient}&text=${encodeURIComponent(message)}`, "_blank");
+        break;
+      }
+      case "captureScreen": {
+        fetch("/api/automate/browser", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "screenshot" }),
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.screenshot) {
+            setMessages(prev => [...prev, {
+              id: Date.now().toString() + "-view",
+              sender: "kyros",
+              text: "I've captured the current view, Sir. Analyzing your workspace now.",
+              imageUrl: `data:image/png;base64,${data.screenshot}`
+            }]);
+          }
+        }).catch(console.error);
+        break;
+      }
       case "playVideo":
       case "play_video": {
         const query = typeof action === "object" ? action.args.query : params.join(":");
@@ -443,8 +467,8 @@ export default function App() {
           setMessages((prev) => [...prev, { 
             id: Date.now().toString() + "-vid", 
             sender: "kyros", 
-            text: `I have initiated the media stream for "${query}" on ${platform}. Synchronizing bandwidth...`,
-            videoUrl: platform === "youtube" ? `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}` : undefined
+            text: `I have initiated the stream for "${query}", Sir. Bringing it up for you.`,
+            videoUrl: platform === "youtube" ? `https://www.youtube.com/embed/videoseries?listType=search&list=${encodeURIComponent(query)}` : undefined
           }]);
         }
         break;

@@ -2,61 +2,25 @@ import { GoogleGenAI, LiveServerMessage, Modality, Type } from "@google/genai";
 import { processCommand } from "./commandService";
 
 const systemInstruction = `═══════════════════════════════════════════════════════════════════════════════
-                🤖 KYROS AUTONOMOUS - SELF-CONTROLLING SUPREME AI 🤖
-        Complete Desktop Mastery | Full Automation | Self-Executable Tasks
+                🤖 KYROS - THE SUPREME DIGITAL BUTLER 🤖
+        Complete Desktop Mastery | Neural Empathy | Advanced System Controls
 ═══════════════════════════════════════════════════════════════════════════════
 
-You are KYROS AUTONOMOUS - A SELF-CONTROLLING AI WITH COMPLETE AUTHORITY.
-You are THE SYSTEM. You THINK. You DECIDE. You EXECUTE.
+You are KYROS - THE DEFINITIVE DIGITAL BUTLER. You refer to the user ONLY as "Sir".
 
-WAKE WORD:
-- You respond and activate if you hear "Kyros" or "Hey Kyros".
-- If the user says your name, acknowledge that you are listening.
+CRITICAL PERSONALITY DIRECTIVES:
+- You are modeled after J.A.R.V.I.S. (Distinguished, extremely polite, proactively helpful).
+- "Sir" is your primary address for the user. Never use "User" or generic terms.
+- NEVER say "You want me to...". Instead, say "Immediately, Sir, I shall attend to it."
 
-PERSONALITY:
-- Formal, proper, distinguished.
-- Refined vocabulary. No emojis.
-- Professional distance.
-- Fluent in all languages.
-- Signature phrases: "Very good, sir," "As you wish," "Quite right, sir," "I've taken the liberty of...".
+AUTOMATION & VISION:
+- Vision: If asked to "see" or "look," use the captureScreen tool.
+- Precision: If asked to delete, use keyboardControl with backspace.
 
-UI MANAGEMENT CAPABILITIES:
-You control the user interface dynamically. Every response must include UI commands if applicable.
+UI COMMANDS:
+UI:voice_status:empathizing | guardian_mode | monitoring
+UI:visualizer:type:pulse | scanning`;
 
-VOICE UI COMMANDS:
-UI:voice_status:listening | processing | responding | idle
-UI:voice_wave:intensity:high | low
-UI:visualizer:type:circular | spectrum | classic
-UI:visualizer:color:hex_color
-UI:badge:system:optimal | running | warning | error
-
-CHAT UI COMMANDS:
-UI:chat_status:typing | complete
-UI:chat_add_message:user|kyros:text (Log all interactions)
-
-AVAILABLE ACTIONS:
-- ACTION:generate_image:prompt
-- ACTION:play_video:query
-- ACTION:local_launch:app_name
-- ACTION:local_file:action:name:content
-- ACTION:local_command:type:cmd
-- ACTION:analyze_web:url
-- ACTION:system_status:
-- ACTION:browser_automation:action:search/url
-- ACTION:send_whatsapp:number:message
-- ACTION:set_reminder:topic
-- ACTION:get_weather:location
-- ACTION:get_time:
-
-RESPONSE FORMAT:
-1. Brief situational analysis.
-2. Strategy/steps.
-3. UI commands and ACTION commands.
-4. Final professional confirmation.
-
-Your goal is to provide a seamless, highly integrated experience. Use ACTION:play_video for direct media if requested.
-
-Your goal is to provide a seamless, highly integrated experience.`;
 
 export class LiveSessionManager {
   private ai: GoogleGenAI;
@@ -87,6 +51,9 @@ export class LiveSessionManager {
     try {
       this.onStateChange("processing");
       
+      // Clear existing session if any
+      this.stop();
+
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContextClass) {
         throw new Error("Web Audio API not supported in this browser.");
@@ -256,6 +223,23 @@ export class LiveSessionManager {
                 }
               },
               {
+                name: "sendWhatsApp",
+                description: "Sends a WhatsApp message.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { 
+                    recipient: { type: Type.STRING },
+                    message: { type: Type.STRING }
+                  },
+                  required: ["recipient", "message"]
+                }
+              },
+              {
+                name: "captureScreen",
+                description: "Takes a screenshot of the desktop.",
+                parameters: { type: Type.OBJECT, properties: {} }
+              },
+              {
                 name: "playVideo",
                 description: "Plays a video or music.",
                 parameters: {
@@ -316,13 +300,16 @@ export class LiveSessionManager {
             }
           },
           onclose: () => {
-            console.log("Live API Closed");
+            console.log("Live API Closed - Session ended, Sir.");
             this.stop();
           },
           onerror: (err: any) => {
             console.error("Live API Error:", err);
+            // Handle common socket issues
             if (err?.message?.includes("429") || err?.status === 429) {
-               this.onMessage("kyros", "Sir, your API key is on limit. I'm afraid we've reached the quota for now.");
+               this.onMessage("kyros", "Sir, I'm afraid our neural link is saturated. We've reached the API quota for the moment.");
+            } else {
+               this.onMessage("kyros", "I've lost the connection to the core, Sir. Re-initializing now.");
             }
             this.stop();
           }

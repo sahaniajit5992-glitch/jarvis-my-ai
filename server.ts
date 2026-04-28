@@ -212,9 +212,22 @@ async function startServer() {
 
     let script = "";
     if (action === "type") {
-      script = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${text}')`;
+      // Escape single quotes for PowerShell
+      const escaped = text.replace(/'/g, "''");
+      script = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escaped}')`;
     } else if (action === "press_key") {
-      const keyMap: Record<string, string> = { "enter": "{ENTER}", "tab": "{TAB}", "space": " " };
+      const keyMap: Record<string, string> = { 
+        "enter": "{ENTER}", 
+        "tab": "{TAB}", 
+        "space": " ",
+        "backspace": "{BACKSPACE}",
+        "delete": "{DELETE}",
+        "up": "{UP}",
+        "down": "{DOWN}",
+        "left": "{LEFT}",
+        "right": "{RIGHT}",
+        "win": "^{ESC}" // Approximation for Win key
+      };
       const key = keyMap[text.toLowerCase()] || text;
       script = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${key}')`;
     }
