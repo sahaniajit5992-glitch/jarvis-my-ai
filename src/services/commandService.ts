@@ -30,7 +30,7 @@ export function processCommand(command: string): {
     return {
       action: `Indeed, sir. Playing ${query} on YouTube.`,
       url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
-      videoUrl: `https://www.youtube.com/embed/videoseries?listType=search&list=${encodeURIComponent(query)}`,
+      videoUrl: `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}&autoplay=1`,
       isBrowserAction: true,
     } as any;
   }
@@ -67,7 +67,7 @@ export function processCommand(command: string): {
     return {
       action: `Very good, sir. Initiating a ${genre} auditory stream.`,
       url: `https://www.youtube.com/results?search_query=${encodeURIComponent(genre + ' music')}`,
-      videoUrl: `https://www.youtube.com/embed/videoseries?listType=search&list=${encodeURIComponent(genre + ' music')}`,
+      videoUrl: `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(genre + ' music')}&autoplay=1`,
       isBrowserAction: true,
     } as any;
   }

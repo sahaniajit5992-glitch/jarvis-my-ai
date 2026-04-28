@@ -283,7 +283,7 @@ export async function getKyrosResponse(prompt: string, history: { sender: "user"
       });
 
       chatSession = ai.chats.create({
-        model: "gemini-3.1-pro-preview", 
+        model: "gemini-2.0-flash", 
         config: {
           systemInstruction: systemInstruction + "\n\nCRITICAL: You MUST use tools/function calls for all automation requests (opening apps, searching web, playing music, managing files). If a tool exists for the user's request, use it. Do not just say you will do it, EXECUTE the tool.",
           tools: tools,
@@ -292,12 +292,13 @@ export async function getKyrosResponse(prompt: string, history: { sender: "user"
       });
     }
 
-    const response = await chatSession.sendMessage(prompt);
+    const result = await chatSession.sendMessage(prompt);
+    const response = result.response;
+    const fCalls = response.functionCalls() || [];
     
-    // Improved tracking: If the model provides function calls, it's "executing"
     return {
-      text: response.text || (response.functionCalls && response.functionCalls.length > 0 ? "Executing commands, Sir." : "I am currently unable to provide a response, sir."),
-      functionCalls: response.functionCalls || []
+      text: response.text() || (fCalls.length > 0 ? "Executing commands, Sir." : "I am currently unable to provide a response, sir."),
+      functionCalls: fCalls
     };
   } catch (error: any) {
     console.error("Gemini Error:", error);

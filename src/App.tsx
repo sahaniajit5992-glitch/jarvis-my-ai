@@ -267,6 +267,7 @@ export default function App() {
   }, []);
 
   const executeAction = useCallback((action: string | { name: string, args: any }) => {
+    console.log("[Kyros] Executing Action:", action);
     let command: string;
     let params: any[];
 
@@ -467,7 +468,7 @@ export default function App() {
             window.open(`https://open.spotify.com/search/${encodeURIComponent(query)}`, "_blank");
           }
           const embedUrl = platform === "youtube" 
-            ? `https://www.youtube.com/embed/videoseries?listType=search&list=${encodeURIComponent(query)}` 
+            ? `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}&autoplay=1` 
             : undefined;
 
           setMessages((prev) => [...prev, { 
