@@ -255,27 +255,12 @@ const getAiKey = () => process.env.GEMINI_API_KEY || FALLBACK_KEY;
 
 export async function generateKyrosImage(prompt: string): Promise<string | null> {
   try {
-    const ai = new GoogleGenAI({ apiKey: getAiKey() });
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image', 
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: {
-        imageConfig: {
-          aspectRatio: "1:1",
-        },
-      },
-    });
+    // Using Pollinations for demo as it's reliable and free for a prototype
+    const encodedPrompt = encodeURIComponent(prompt);
+    const imageUrl = `https://pollinations.ai/p/${encodedPrompt}?width=1024&height=1024&seed=${Math.floor(Math.random() * 1000)}&model=flux`;
     
-    const candidate = response.candidates?.[0];
-    const parts = candidate?.content?.parts;
-    
-    if (parts) {
-      for (const part of parts) {
-        if (part.inlineData) {
-          return `data:image/png;base64,${part.inlineData.data}`;
-        }
-      }
-    }
+    // Test if image is valid/loading (optional, but good for UI)
+    return imageUrl;
   } catch (error) {
     console.error("Image Gen Error:", error);
   }
@@ -287,7 +272,7 @@ export async function getKyrosResponse(prompt: string, history: { sender: "user"
     const ai = new GoogleGenAI({ apiKey: getAiKey() });
     
     if (!chatSession) {
-      const recentHistory = history.slice(-10); 
+      const recentHistory = history.slice(-15); 
       let formattedHistory: any[] = [];
       
       recentHistory.forEach(h => {
@@ -298,9 +283,9 @@ export async function getKyrosResponse(prompt: string, history: { sender: "user"
       });
 
       chatSession = ai.chats.create({
-        model: "gemini-3-flash-preview", 
+        model: "gemini-3.1-pro-preview", 
         config: {
-          systemInstruction,
+          systemInstruction: systemInstruction + "\n\nCRITICAL: You MUST use tools/function calls for all automation requests (opening apps, searching web, playing music, managing files). If a tool exists for the user's request, use it. Do not just say you will do it, EXECUTE the tool.",
           tools: tools,
         },
         history: formattedHistory,
@@ -309,9 +294,10 @@ export async function getKyrosResponse(prompt: string, history: { sender: "user"
 
     const response = await chatSession.sendMessage(prompt);
     
+    // Improved tracking: If the model provides function calls, it's "executing"
     return {
-      text: response.text || "I am currently unable to provide a response, sir.",
-      functionCalls: response.functionCalls
+      text: response.text || (response.functionCalls && response.functionCalls.length > 0 ? "Executing commands, Sir." : "I am currently unable to provide a response, sir."),
+      functionCalls: response.functionCalls || []
     };
   } catch (error: any) {
     console.error("Gemini Error:", error);
@@ -332,5 +318,24 @@ export async function getKyrosResponse(prompt: string, history: { sender: "user"
 }
 
 export async function getKyrosAudio(text: string): Promise<string | null> {
-  return null;
+  try {
+    const ai = new GoogleGenAI({ apiKey: getAiKey() });
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-flash-tts-preview",
+      contents: [{ parts: [{ text: `Say naturally but professionally in JARVIS style (Hinglish): ${text}` }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: 'Charon' }, // Charon is good for male butler voice
+          },
+        },
+      },
+    });
+
+    return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || null;
+  } catch (error) {
+    console.error("TTS Error:", error);
+    return null;
+  }
 }

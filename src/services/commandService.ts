@@ -26,12 +26,13 @@ export function processCommand(command: string): {
   // Media Search: "Play [song/video] on YouTube"
   const ytMatch = lowerCmd.match(/^play\s+(.+?)\s+on\s+youtube$/);
   if (ytMatch) {
-    const query = encodeURIComponent(ytMatch[1].trim());
+    const query = ytMatch[1].trim();
     return {
-      action: `Indeed, sir. Playing ${ytMatch[1]} on YouTube.`,
-      url: `https://www.youtube.com/results?search_query=${query}`,
+      action: `Indeed, sir. Playing ${query} on YouTube.`,
+      url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
+      videoUrl: `https://www.youtube.com/embed/videoseries?listType=search&list=${encodeURIComponent(query)}`,
       isBrowserAction: true,
-    };
+    } as any;
   }
 
   // Media Search: "Search [query] on Spotify"
@@ -63,12 +64,12 @@ export function processCommand(command: string): {
   const genreMatch = lowerCmd.match(/^play\s+(.+?)\s+music$/);
   if (genreMatch) {
     const genre = genreMatch[1].trim();
-    const query = encodeURIComponent(`${genre} music`);
     return {
       action: `Very good, sir. Initiating a ${genre} auditory stream.`,
-      url: `https://www.youtube.com/results?search_query=${query}`,
+      url: `https://www.youtube.com/results?search_query=${encodeURIComponent(genre + ' music')}`,
+      videoUrl: `https://www.youtube.com/embed/videoseries?listType=search&list=${encodeURIComponent(genre + ' music')}`,
       isBrowserAction: true,
-    };
+    } as any;
   }
 
   // Reminders: "Set a reminder for [topic]"

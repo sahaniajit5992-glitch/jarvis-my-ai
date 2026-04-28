@@ -10,6 +10,7 @@ import SettingsModal from "./components/SettingsModal";
 import SystemBar from "./components/SystemBar";
 import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
+import Markdown from "react-markdown";
 
 type AppState = "idle" | "listening" | "processing" | "speaking";
 type PermissionStateValue = "granted" | "denied" | "prompt";
@@ -123,6 +124,7 @@ export default function App() {
   const [vizColor, setVizColor] = useState<string>(() => localStorage.getItem("kyros_viz_color") || "#00f2ff");
   const [vizIntensity, setVizIntensity] = useState<"high" | "low">(() => (localStorage.getItem("kyros_viz_intensity") as "high" | "low") || "low");
   const [vizMode, setVizMode] = useState<"classic" | "circular" | "spectrum">("circular");
+  const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     const saved = localStorage.getItem("kyros_chat_history");
     if (saved) {
@@ -464,11 +466,15 @@ export default function App() {
           if (platform === "spotify") {
             window.open(`https://open.spotify.com/search/${encodeURIComponent(query)}`, "_blank");
           }
+          const embedUrl = platform === "youtube" 
+            ? `https://www.youtube.com/embed/videoseries?listType=search&list=${encodeURIComponent(query)}` 
+            : undefined;
+
           setMessages((prev) => [...prev, { 
             id: Date.now().toString() + "-vid", 
             sender: "kyros", 
-            text: `I have initiated the stream for "${query}", Sir. Bringing it up for you.`,
-            videoUrl: platform === "youtube" ? `https://www.youtube.com/embed/videoseries?listType=search&list=${encodeURIComponent(query)}&autoplay=1` : undefined
+            text: `Sir, I've located the media stream for "${query}". Initiating playback on ${platform} now.`,
+            videoUrl: embedUrl
           }]);
         }
         break;
@@ -582,7 +588,12 @@ export default function App() {
 
     if (commandResult.isBrowserAction) {
       const responseText = commandResult.action;
-      setMessages((prev) => [...prev, { id: Date.now().toString() + "-j", sender: "kyros", text: responseText }]);
+      setMessages((prev) => [...prev, { 
+        id: Date.now().toString() + "-j", 
+        sender: "kyros", 
+        text: responseText,
+        videoUrl: (commandResult as any).videoUrl
+      }]);
       
       if (!isMuted) {
         setAppState("speaking");
@@ -595,7 +606,7 @@ export default function App() {
       setAppState("idle");
 
       setTimeout(() => {
-        if (commandResult.url) {
+        if (commandResult.url && !(commandResult as any).videoUrl) {
           window.open(commandResult.url, "_blank");
         }
       }, 1500);
@@ -609,6 +620,17 @@ export default function App() {
       setMessages((prev) => [...prev, { id: Date.now().toString() + "-j", sender: "kyros", text: cleanResponse }]);
       
       parseUICommands(responseText);
+
+      // Handle function calls if present
+      const hasExecutions = (kyrosRes.functionCalls && kyrosRes.functionCalls.length > 0) || actionMatch;
+      
+      if (hasExecutions) {
+        setMessages(prev => [...prev, { 
+          id: Date.now().toString() + "-exec", 
+          sender: "kyros", 
+          text: "_System: Executing neural automation protocols..._" 
+        }]);
+      }
 
       if (!isMuted) {
         setAppState("speaking");
@@ -721,6 +743,12 @@ export default function App() {
     document.documentElement.style.setProperty('--primary-glow', `${vizColor}66`);
   }, [vizColor]);
 
+  const setVisualizerConfig = () => {
+    const modes: ("circular" | "spectrum" | "classic")[] = ["circular", "spectrum", "classic"];
+    const nextMode = modes[(modes.indexOf(vizMode) + 1) % modes.length];
+    setVizMode(nextMode);
+  };
+
   if (!user) {
     return <LoginScreen onLogin={handleLogin} />;
   }
@@ -760,251 +788,307 @@ export default function App() {
 
       {/* Header */}
       <SystemBar />
-      <header className="glass-panel w-[95%] mx-auto mt-4 px-6 py-3 flex justify-between items-center z-20 rounded-lg shrink-0">
+      <header className="glass-panel w-[95%] mx-auto mt-4 px-6 py-3 flex justify-between items-center z-20 rounded-lg shrink-0 border-cyan-500/20 bg-black/40 backdrop-blur-md">
         <div className="flex flex-col">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center border border-cyan-400 glow-border">
               <Activity className="text-cyan-400" size={16} />
             </div>
-            <h1 className="text-xl font-display font-bold tracking-[0.2em] text-cyan-400 glow-text">KYROS SYSTEM</h1>
+            <h1 className="text-xl font-display font-bold tracking-[0.2em] text-cyan-400 glow-text uppercase">Kyros Core</h1>
           </div>
           <div className="text-[10px] font-mono text-cyan-500/60 ml-11 uppercase leading-none border-l border-cyan-400/20 pl-2">
             BIO-RECOGNITION: {user} // AUTH_LVL: 5
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-6">
+          <div className="hidden md:flex flex-col items-end font-mono text-cyan-400">
+            <div className="text-xl tracking-tighter">{time.toLocaleTimeString([], { hour12: false })}</div>
+            <div className="text-[10px] opacity-60"> // {time.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+          </div>
           <button 
             onClick={() => setShowSettings(true)}
             className="p-2 hover:bg-white/5 rounded-full transition-colors text-cyan-400 group relative"
           >
             <Settings className="group-hover:rotate-90 transition-transform duration-500" size={20} />
-            <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-[8px] font-mono whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest bg-black/80 px-2 py-1 rounded border border-cyan-500/20">System Config</span>
           </button>
-          <div className="flex flex-col items-end font-mono text-cyan-400">
-            <div className="text-xl tracking-tighter">{time.toLocaleTimeString([], { hour12: false })}</div>
-            <div className="text-[10px] opacity-60"> // {time.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-          </div>
         </div>
       </header>
 
       {/* Main Content Grid */}
       <main className="flex-1 p-2 md:p-6 z-10 overflow-hidden min-h-0 relative">
-        <AnimatePresence mode="wait">
-          {uiMode === "voice" ? (
-            <motion.div 
-              key="voice-mode"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.05 }}
-              className="h-full grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4"
-            >
-              {/* Sidebar Diagnostics - Hidden on small mobile in voice mode if preferred */}
-              <div className="md:col-span-3 flex flex-col gap-4 overflow-y-auto scrollbar-hide min-h-0 order-2 md:order-1">
-                <DataCard title="Meteorological" icon={Cloud}>
-                  {weather ? (
-                    <div className="flex flex-col gap-4 text-xs font-mono">
-                      <div className="flex justify-between items-center bg-cyan-500/5 p-2 rounded border border-cyan-500/10">
-                        <span className="text-cyan-400">LOC: {weather.current.city.toUpperCase()}</span>
-                        <span className="text-white">{weather.current.temp}°C</span>
-                      </div>
-                      <div className="flex justify-between items-center bg-cyan-500/5 p-2 rounded border border-cyan-500/10">
-                        <span className="text-cyan-400">COND: {weather.current.condition.toUpperCase()}</span>
-                      </div>
-                    </div>
-                  ) : <div className="text-[10px] animate-pulse">SEARCHING SATELLITE...</div>}
-                </DataCard>
-                
-                <DataCard title="Bio-Metrics" icon={Activity}>
-                  <div className="flex justify-between items-center text-xs font-mono">
-                    <span className="text-cyan-400">CORE_T</span>
-                    <span className="text-white">{coreTemp.toFixed(1)}°C</span>
-                  </div>
-                </DataCard>
-
-                <DataCard title="Neural Link" icon={Cpu} className="flex-1">
-                  <div className="flex-1 flex flex-col items-center justify-center relative">
-                    <div className="w-16 h-16 rounded-full border border-cyan-400/20 flex items-center justify-center">
-                      <div className="w-8 h-8 rounded-full border border-cyan-400/50 animate-ping" />
-                      <span className="absolute text-[8px] font-mono text-cyan-400">LINK: OK</span>
-                    </div>
-                  </div>
-                </DataCard>
-              </div>
-
-              {/* Main Visualizer */}
-              <div className="md:col-span-6 flex flex-col items-center justify-center relative min-h-0">
-                <Visualizer state={appState} colorOverride={vizColor} intensityOverride={vizIntensity} mode={vizMode} />
-                
-                <div className="mt-12 flex items-center gap-8 z-20">
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={toggleListening}
-                    className={`w-24 h-24 rounded-full flex items-center justify-center transition-all ${
-                      isSessionActive 
-                        ? "bg-cyan-500 shadow-[0_0_50px_rgba(0,242,255,0.6)] ring-4 ring-cyan-500/30" 
-                        : "bg-white/5 border border-cyan-400/50 hover:bg-cyan-500/20"
-                    }`}
-                  >
-                    {isSessionActive ? <Mic size={40} className="text-white" /> : <MicOff size={40} className="text-cyan-400" />}
-                  </motion.button>
-                  
-                  <div className="flex flex-col gap-4">
-                    <button onClick={() => setIsMuted(!isMuted)} className="p-4 rounded-full glass-panel hover:bg-cyan-500/20 transition-colors">
-                      {isMuted ? <VolumeX size={24} className="text-red-400" /> : <Volume2 size={24} className="text-cyan-400" />}
-                    </button>
-                    <button onClick={() => setUiMode("chat")} className="p-4 rounded-full glass-panel hover:bg-cyan-500/20 transition-colors">
-                      <Terminals size={24} className="text-cyan-400" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* System Log Mini */}
-              <div className="md:col-span-3 flex flex-col gap-4 h-full">
-                <DataCard title="Sub-System Stats" icon={Shield}>
-                   <div className="flex flex-col gap-2">
-                     <div className="flex justify-between items-center text-[10px] font-mono border-b border-cyan-500/5 pb-1">
-                       <span className="text-cyan-400/60">MIC_LINK</span>
-                       <span className={micState === 'granted' ? "text-green-400" : "text-amber-400"}>{micState.toUpperCase()}</span>
-                     </div>
-                     <div className="flex justify-between items-center text-[10px] font-mono border-b border-cyan-500/5 pb-1">
-                       <span className="text-cyan-400/60">LOC_SENS</span>
-                       <span className={locState === 'granted' ? "text-green-400" : "text-amber-400"}>{locState.toUpperCase()}</span>
-                     </div>
-                     {['OS', 'NET', 'SEC', 'AI'].map(sys => (
-                       <div key={sys} className="flex justify-between items-center text-[10px] font-mono border-b border-cyan-500/5 pb-1">
-                         <span className="text-cyan-400/60">{sys}_MTRX</span>
-                         <span className="text-green-400">STABLE</span>
-                       </div>
-                     ))}
+        <div className="h-full grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4">
+          
+          {/* Left Column: Stats & Chat */}
+          <div className="md:col-span-3 flex flex-col gap-4 min-h-0 order-2 md:order-1">
+            <DataCard title="Sub-System Stats" icon={Shield}>
+               <div className="flex flex-col gap-2">
+                 {[
+                   { label: 'MIC_LINK', val: micState === 'granted' ? 'GRANTED' : 'WAITING', color: micState === 'granted' ? 'text-green-400' : 'text-amber-400' },
+                   { label: 'LOC_SENS', val: locState === 'granted' ? 'GRANTED' : 'WAITING', color: locState === 'granted' ? 'text-green-400' : 'text-amber-400' },
+                   { label: 'OS_MTRX', val: 'STABLE' },
+                   { label: 'NET_MTRX', val: 'STABLE' },
+                   { label: 'SEC_MTRX', val: 'STABLE' },
+                   { label: 'AI_MTRX', val: 'STABLE' }
+                 ].map(stat => (
+                   <div key={stat.label} className="flex justify-between items-center text-[10px] font-mono border-b border-cyan-500/5 pb-1">
+                     <span className="text-cyan-400/60 uppercase">{stat.label}</span>
+                     <span className={stat.color || "text-green-400"}>{stat.val}</span>
                    </div>
-                </DataCard>
-                <div className="glass-panel flex-1 rounded-lg border border-cyan-400/10 p-2 overflow-hidden flex flex-col">
-                  <span className="text-[8px] font-mono text-cyan-400/50 mb-2 uppercase tracking-widest">Global Stream</span>
-                  <div className="flex-1 overflow-y-auto scrollbar-hide text-[9px] font-mono text-cyan-200/40 lowercase space-y-1">
-                    {messages.slice(-5).map(m => (
-                      <div key={m.id}>- {m.sender}: {m.text.substring(0, 30)}...</div>
-                    ))}
-                  </div>
+                 ))}
+               </div>
+            </DataCard>
+
+            {/* CHAT TERMINAL (Marked Area) */}
+            <motion.div 
+              layout
+              onClick={() => !isChatExpanded && setIsChatExpanded(true)}
+              className={`glass-panel h-[400px] rounded-lg border border-cyan-400/10 p-4 overflow-hidden flex flex-col bg-black/40 backdrop-blur-md relative border-t-2 border-t-cyan-500/30 cursor-pointer group transition-all hover:border-cyan-400/30 ${isChatExpanded ? 'opacity-0' : 'opacity-100'}`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] font-mono text-cyan-400 font-bold uppercase tracking-[0.2em]">Neural Stream</span>
+                <div className="flex gap-1">
+                   <div className="w-1 h-1 rounded-full bg-cyan-400 animate-pulse" />
+                   <div className="w-1 h-1 rounded-full bg-cyan-400 animate-pulse [animation-delay:0.2s]" />
+                   <div className="w-1 h-1 rounded-full bg-cyan-400 animate-pulse [animation-delay:0.4s]" />
                 </div>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto scrollbar-hide space-y-4 pr-1 mb-3">
+                {messages.length === 0 && (
+                  <div className="h-full flex flex-col items-center justify-center opacity-30 text-[10px] font-mono tracking-widest text-center px-4 gap-2">
+                    <Activity size={24} className="animate-pulse" />
+                    AWAITING UPLINK...
+                  </div>
+                )}
+                {messages.slice(-5).map((m) => (
+                  <div 
+                    key={m.id}
+                    className={`flex flex-col gap-1 ${m.sender === 'user' ? 'items-end' : 'items-start'}`}
+                  >
+                    <div className="flex items-center gap-2 opacity-50 text-[7px] font-mono uppercase">
+                      <span className={m.sender === 'kyros' ? "text-cyan-400" : "text-white"}>{m.sender}</span>
+                    </div>
+                    <div className={`text-[9px] font-mono leading-tight p-2 rounded max-w-[95%] ${
+                      m.sender === 'user' ? 'bg-cyan-500/10 border border-cyan-500/20 text-white' : 'bg-white/5 border border-white/5 text-cyan-50'
+                    }`}>
+                      <p className="line-clamp-2">{m.text}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="text-[8px] font-mono text-cyan-500/40 text-center animate-pulse uppercase tracking-widest mt-auto">
+                Tap to Expand Console
               </div>
             </motion.div>
-          ) : (
-            <motion.div 
-              key="chat-mode"
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -50 }}
-              className="h-full flex flex-col gap-4 max-w-5xl mx-auto w-full"
-            >
-              <div className="flex items-center justify-between shrink-0 mb-4 px-2">
-                <div className="flex items-center gap-4">
-                  <button onClick={() => setUiMode("voice")} className="flex items-center gap-2 text-cyan-400 hover:text-cyan-200 transition-colors font-mono text-xs">
-                    <Mic size={14} /> BACK_TO_IMMERSIVE
-                  </button>
-                  <div className="h-4 w-[1px] bg-white/10" />
-                  <span className="text-white/40 font-mono text-[10px] uppercase tracking-widest">Autonomous Terminal Console v2.4</span>
-                </div>
-                <button onClick={() => { if(confirm("CLEAR LOGS?")) setMessages([]); }} className="text-red-400 hover:text-red-300 font-mono text-[10px]">
-                  PURGE_HISTORY
+          </div>
+
+          {/* Middle Column: Visualizer */}
+          <div className="md:col-span-6 flex flex-col items-center justify-center relative min-h-0 order-1 md:order-2">
+            <div className="relative w-full flex-1 flex flex-col items-center justify-center">
+              <Visualizer state={appState} colorOverride={vizColor} intensityOverride={vizIntensity} mode={vizMode} />
+              
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                 <div className="w-[80%] h-[80%] border border-cyan-400/20 rounded-full animate-pulse" />
+                 <div className="absolute w-[90%] h-[90%] border border-cyan-400/10 rounded-full animate-ping [animation-duration:4s]" />
+              </div>
+            </div>
+            
+            <div className="mt-6 flex items-center gap-6 z-20 pb-4">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={toggleListening}
+                className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
+                  isSessionActive 
+                    ? "bg-cyan-500 shadow-[0_0_40px_rgba(0,242,255,0.6)] ring-4 ring-cyan-500/30" 
+                    : "bg-white/5 border border-cyan-400/50 hover:bg-cyan-500/10"
+                }`}
+              >
+                {isSessionActive ? <Mic size={32} className="text-white" /> : <MicOff size={32} className="text-cyan-400" />}
+              </motion.button>
+              
+              <div className="flex gap-4">
+                <button onClick={() => setIsMuted(!isMuted)} className={`p-4 rounded-full glass-panel hover:bg-cyan-500/20 transition-all border-cyan-500/30`}>
+                  {isMuted ? <VolumeX size={20} className="text-red-400" /> : <Volume2 size={20} className="text-cyan-400" />}
+                </button>
+                <button onClick={() => setVisualizerConfig()} className="p-4 rounded-full glass-panel hover:bg-cyan-500/20 transition-all border-cyan-500/30">
+                  <Activity size={20} className="text-cyan-400" />
                 </button>
               </div>
+            </div>
+          </div>
 
-              <div className="flex-1 glass-panel rounded-xl overflow-hidden flex flex-col border border-cyan-500/20 bg-black/60 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scrollbar-thin scrollbar-thumb-cyan-500/20">
-                  {messages.length === 0 && (
-                    <div className="h-full flex flex-col items-center justify-center opacity-30 text-cyan-400 gap-4">
-                      <Activity size={48} className="animate-pulse" />
-                      <span className="font-mono text-xs tracking-[0.4em]">AWAITING SYSTEM DATA...</span>
-                    </div>
-                  )}
-                  {messages.map((m) => (
-                    <motion.div 
-                      key={m.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={`flex flex-col ${m.sender === "user" ? "items-end" : "items-start"}`}
-                    >
-                      <div className="flex items-center gap-2 mb-2 opacity-40 font-mono text-[8px] uppercase">
-                        {m.sender === "user" ? <User size={8} /> : <Zap size={8} className="text-cyan-400" />}
-                        {m.sender} // {new Date().toLocaleTimeString()}
-                      </div>
-                      <div className={`max-w-[90%] md:max-w-[85%] p-3 md:p-4 rounded-lg font-mono text-xs md:text-sm leading-relaxed ${
-                        m.sender === "user" 
-                          ? "bg-cyan-500/10 border border-cyan-500/30 text-cyan-50" 
-                          : "bg-white/5 border border-white/10 text-cyan-100 shadow-[inset_0_0_20px_rgba(255,255,255,0.02)]"
-                      }`}>
-                        {m.text}
-                        {m.imageUrl && (
-                          <div className="mt-4 rounded-lg overflow-hidden border border-cyan-400/30 shadow-[0_0_20px_rgba(0,242,255,0.1)]">
-                            <img 
-                              src={m.imageUrl} 
-                              alt="Generated by Kyros" 
-                              className="w-full h-auto object-cover"
-                              referrerPolicy="no-referrer"
-                            />
-                          </div>
-                        )}
-                        {m.videoUrl && (
-                          <div className="mt-4 aspect-video rounded-lg overflow-hidden border border-cyan-400/30 shadow-[0_0_20px_rgba(0,242,255,0.1)] bg-black">
-                            <iframe 
-                              src={m.videoUrl} 
-                              className="w-full h-full"
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                              allowFullScreen
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
-                  <div ref={messagesEndRef} />
+          {/* Right Column: Other Diagnostics */}
+          <div className="md:col-span-3 flex flex-col gap-4 min-h-0 order-3">
+            <DataCard title="Meteorological" icon={Cloud}>
+              {weather ? (
+                <div className="flex flex-col gap-3 text-xs font-mono">
+                  <div className="flex justify-between items-center bg-cyan-500/5 p-2 rounded border border-cyan-500/10">
+                    <span className="text-cyan-400">LOC: {weather.current.city.toUpperCase()}</span>
+                    <span className="text-white">{weather.current.temp}°C</span>
+                  </div>
+                  <div className="flex justify-between items-center bg-cyan-500/5 p-2 rounded border border-cyan-500/10">
+                    <span className="text-cyan-400 text-[10px]">COND: {weather.current.condition.toUpperCase()}</span>
+                    {weather.current.condition.toLowerCase().includes('rain') ? <CloudRain size={14} className="text-cyan-300" /> : <Sun size={14} className="text-amber-400" />}
+                  </div>
                 </div>
+              ) : <div className="text-[10px] animate-pulse text-cyan-400/60 uppercase">Searching satellites...</div>}
+            </DataCard>
+            
+            <DataCard title="Bio-Metrics" icon={Activity}>
+              <div className="flex justify-between items-center p-2 bg-cyan-500/5 rounded border border-cyan-500/10 text-xs font-mono">
+                <span className="text-cyan-400">CORE_T</span>
+                <span className="text-white font-bold">{coreTemp.toFixed(1)}°C</span>
+              </div>
+            </DataCard>
 
-                <div className="p-4 border-t border-cyan-500/20 bg-black/40">
-                  <form onSubmit={handleTextSubmit} className="flex gap-4">
-                    <div className="flex-1 relative">
-                       <div className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400/50">{">"}</div>
-                       <input 
-                         type="text"
-                         value={textInput}
-                         onChange={(e) => setTextInput(e.target.value)}
-                         placeholder="INPUT_COMMAND_STRING..."
-                         className="w-full bg-cyan-500/5 border border-cyan-500/20 rounded-lg py-4 pl-10 pr-4 text-white font-mono placeholder:text-white/10 focus:outline-none focus:border-cyan-400 transition-all shadow-inner"
-                         autoFocus
-                       />
-                    </div>
-                    <button type="submit" className="px-8 bg-cyan-600 hover:bg-cyan-700 text-white font-display font-bold tracking-widest rounded-lg transition-all shadow-[0_0_20px_rgba(0,242,255,0.2)]">
-                      EXECUTE
-                    </button>
-                  </form>
+            <DataCard title="Neural Link" icon={Cpu} className="flex-1">
+              <div className="flex-1 flex flex-col items-center justify-center relative min-h-[140px]">
+                <div className="w-24 h-24 rounded-full border border-cyan-400/10 flex items-center justify-center relative">
+                   <motion.div 
+                     animate={{ rotate: 360 }}
+                     transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+                     className="absolute inset-0 border-t-2 border-cyan-400/60 rounded-full" 
+                   />
+                   <div className="w-16 h-16 rounded-full border border-cyan-400/5 flex items-center justify-center">
+                     <span className="text-[9px] font-mono text-cyan-400 animate-pulse uppercase tracking-tighter">Link: OK</span>
+                   </div>
                 </div>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </DataCard>
+          </div>
+        </div>
       </main>
 
       {/* Footer */}
-      <footer className="glass-panel w-[95%] mx-auto mb-4 px-6 py-2 flex justify-between items-center z-20 rounded-lg shrink-0">
+      <footer className="glass-panel w-[95%] mx-auto mb-4 px-6 py-2 flex justify-between items-center z-20 rounded-lg shrink-0 border-cyan-500/20 bg-black/40 backdrop-blur-md">
         <div className="flex items-center gap-6">
-          <span className="text-[10px] font-display text-cyan-500/60 tracking-widest uppercase">Active Modules</span>
+          <span className="text-[10px] font-mono text-cyan-500/60 tracking-widest uppercase">System Flux</span>
           <div className="flex gap-2">
             {[<Globe size={10} />, <Shield size={10} />, <Zap size={10} />].map((icon, i) => (
-              <div key={i} className="p-1 px-3 bg-cyan-500/10 border border-cyan-400/30 rounded flex items-center justify-center">
+              <div key={i} className="p-1 px-3 bg-cyan-500/5 border border-cyan-400/20 rounded flex items-center justify-center text-cyan-400">
                 {icon}
               </div>
             ))}
           </div>
         </div>
 
-        <div className="flex items-center gap-3 px-4 py-1 bg-cyan-500/20 border border-cyan-400 rounded-lg cursor-default">
-           <User size={14} className="text-cyan-400" />
-           <span className="text-xs font-display font-bold tracking-widest text-cyan-50 uppercase">{user}</span>
+        <div className="flex items-center gap-3 px-4 py-1.5 bg-cyan-500/10 border border-cyan-400/40 rounded-lg cursor-default">
+           <User size={12} className="text-cyan-400" />
+           <span className="text-[10px] font-display font-bold tracking-widest text-cyan-50 uppercase">{user}</span>
         </div>
       </footer>
+
+      {/* Expanded Chat Overlay */}
+      <AnimatePresence>
+        {isChatExpanded && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex flex-col p-4 md:p-10"
+          >
+            <div className="absolute inset-0 scanline opacity-20 pointer-events-none" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(6,182,212,0.05),transparent_70%)] pointer-events-none" />
+            
+            <div className="max-w-6xl w-full mx-auto h-full flex flex-col relative z-10">
+              <div className="flex items-center justify-between mb-8 border-b border-cyan-500/20 pb-4">
+                <div className="flex items-center gap-4">
+                   <div className="p-2 rounded bg-cyan-500/10 border border-cyan-400/40">
+                      <Terminals className="text-cyan-400" size={24} />
+                   </div>
+                   <div>
+                      <h2 className="text-2xl font-display font-bold text-cyan-400 glow-text tracking-[0.2em] uppercase">Neural Console</h2>
+                      <div className="text-[10px] font-mono text-cyan-500/60 uppercase tracking-widest">Uplink Stable // Session: {Date.now()}</div>
+                   </div>
+                </div>
+                <button 
+                  onClick={() => setIsChatExpanded(false)}
+                  className="p-3 hover:bg-white/5 rounded-full text-cyan-400/60 hover:text-cyan-400 transition-all border border-transparent hover:border-cyan-400/20"
+                >
+                  <Zap size={24} /> {/* Using Zap as a stylish close icon */}
+                  <span className="text-[8px] block mt-1 uppercase font-mono">Terminal Exit</span>
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar space-y-10 mb-8 pr-4">
+                {messages.length === 0 && (
+                  <div className="h-full flex flex-col items-center justify-center opacity-20 text-xl font-mono tracking-[1em] text-cyan-400 animate-pulse">
+                     AWAITING COMMANDS...
+                  </div>
+                )}
+                {messages.map((m) => (
+                  <motion.div 
+                    key={m.id}
+                    initial={{ opacity: 0, x: m.sender === 'user' ? 20 : -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className={`flex flex-col gap-3 ${m.sender === 'user' ? 'items-end' : 'items-start'}`}
+                  >
+                    <div className="flex items-center gap-3 opacity-60 text-[10px] font-mono uppercase tracking-widest">
+                      <span className={m.sender === 'kyros' ? "text-cyan-400 font-bold" : "text-white"}>{m.sender === 'kyros' ? 'SYS_INTELLIGENCE' : 'USER_COMMANDER'}</span>
+                      <span className="opacity-30">//</span>
+                      <span>{new Date().toLocaleTimeString()}</span>
+                    </div>
+                    
+                    <div className={`max-w-[85%] md:max-w-[70%] text-lg md:text-xl font-light leading-relaxed p-6 rounded-2xl border ${
+                      m.sender === 'user' 
+                        ? 'bg-cyan-500/5 border-cyan-500/30 text-white chat-bubble-user' 
+                        : 'bg-white/5 border-white/10 text-cyan-50 chat-bubble-kyros'
+                    }`}>
+                      <Markdown>{m.text}</Markdown>
+                      
+                      {m.imageUrl && (
+                        <div className="mt-6 rounded-xl border border-cyan-500/30 overflow-hidden shadow-2xl shadow-cyan-500/20 group relative">
+                          <img src={m.imageUrl} alt="System Visualization" className="w-full h-auto" referrerPolicy="no-referrer" />
+                          <div className="absolute inset-0 bg-cyan-400/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      )}
+                      
+                      {m.videoUrl && (
+                        <div className="mt-6 aspect-video rounded-xl border border-cyan-500/30 overflow-hidden bg-black shadow-2xl shadow-cyan-500/20">
+                          <iframe 
+                            src={m.videoUrl} 
+                            className="w-full h-full" 
+                            allow="autoplay; encrypted-media; fullscreen" 
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+
+              <div className="mt-auto">
+                <form onSubmit={handleTextSubmit} className="relative group">
+                  <div className="absolute left-6 top-1/2 -translate-y-1/2 text-cyan-400 transition-all group-focus-within:scale-125 select-none drop-shadow-[0_0_10px_#00f2ff]">
+                    <Zap size={28} />
+                  </div>
+                  <input 
+                    type="text"
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    placeholder="ENTER NEURAL COMMAND SIR..."
+                    className="w-full bg-cyan-500/5 border border-cyan-500/20 rounded-full py-8 pl-20 pr-10 text-2xl font-light text-white placeholder:text-cyan-500/20 focus:outline-none focus:border-cyan-400 focus:bg-cyan-500/10 focus:shadow-[0_0_50px_rgba(0,242,255,0.1)] transition-all"
+                  />
+                  <div className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] font-mono text-cyan-400/40 uppercase tracking-widest pointer-events-none">
+                    Press Enter to Execute
+                  </div>
+                </form>
+                
+                <div className="mt-6 flex justify-center gap-12 text-[10px] font-mono text-cyan-500/20 tracking-[0.4em] uppercase">
+                   <div className="flex items-center gap-2"> Encryption: AES_256</div>
+                   <div className="flex items-center gap-2"> Neural Flow: Stable</div>
+                   <div className="flex items-center gap-2"> Privacy: Hardened</div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
