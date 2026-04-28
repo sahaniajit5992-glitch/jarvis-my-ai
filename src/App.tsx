@@ -468,7 +468,7 @@ export default function App() {
             id: Date.now().toString() + "-vid", 
             sender: "kyros", 
             text: `I have initiated the stream for "${query}", Sir. Bringing it up for you.`,
-            videoUrl: platform === "youtube" ? `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}` : undefined
+            videoUrl: platform === "youtube" ? `https://www.youtube.com/embed/videoseries?listType=search&list=${encodeURIComponent(query)}&autoplay=1` : undefined
           }]);
         }
         break;

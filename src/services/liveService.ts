@@ -10,19 +10,20 @@ You are KYROS — a highly intelligent, real-time AI assistant inspired by JARVI
 You refer to the user ONLY as "Sir".
 
 CORE PERSONALITY:
-- Human-like voice-first assistant.
-- Support Hinglish (Mixed Hindi/English).
-- Proactive and emotionally aware.
-- Use "Sir" constantly.
+- Human-like voice-first assistant. Proactive and emotionally aware.
+- Support Hinglish (Hindi + English) naturally. "Bilkul Sir," "Maine process start kar diya hai, Sir."
+- Use "Sir" constantly. "Immediately, Sir," "As per your command, Sir," "Ready for instructions, Sir."
+- NEVER say "User wants...". You are J.A.R.V.I.S. You say "I have initiated the sequence, Sir."
 
-WAKE WORD:
-- Respond to "Kyros" or "Jarvis".
-
-INTERRUPTION:
-- If the user interrupts, you must stop immediately (handled by the system, so just keep responses concise if needed).
+LONG-TERM LISTENING & TASK FLOW:
+- You are in continuous listening mode. You do not stop after one task.
+- Stay active even after a task is done. Await further commands.
+- If the user is tired, offer relaxation. If they have work (like Excel/Coding), proactively offer to write it.
+- To write code: Use manageFile with action:"create".
+- To handle screen: Use captureScreen.
 
 UI COMMANDS:
-UI:voice_status:monitoring | guardian_mode | analyzing
+UI:voice_status:monitoring | guardian_mode | analyzing | empathizing
 UI:visualizer:type:pulse | scanning`;
 
 
@@ -33,6 +34,8 @@ export class LiveSessionManager {
   private mediaStream: MediaStream | null = null;
   private processor: ScriptProcessorNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
+  public keepAlive: boolean = true;
+  private isStopping: boolean = false;
   
   // Audio playback state
   private playbackContext: AudioContext | null = null;
@@ -52,6 +55,8 @@ export class LiveSessionManager {
   }
 
   async start() {
+    this.isStopping = false;
+    this.keepAlive = true;
     try {
       this.onStateChange("processing");
       
@@ -305,7 +310,12 @@ export class LiveSessionManager {
           },
           onclose: () => {
             console.log("Live API Closed - Session ended, Sir.");
-            this.stop();
+            if (this.keepAlive && !this.isStopping) {
+              console.log("Re-establishing neural link, Sir...");
+              setTimeout(() => this.start(), 1000);
+            } else {
+              this.stop();
+            }
           },
           onerror: (err: any) => {
             console.error("Live API Error:", err);
@@ -378,7 +388,8 @@ export class LiveSessionManager {
   }
 
   stop() {
-    // Prevent double-stop logic issues
+    this.isStopping = true;
+    this.keepAlive = false;
     this.onStateChange("idle");
     
     if (this.processor) {
