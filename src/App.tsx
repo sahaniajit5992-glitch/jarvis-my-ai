@@ -326,6 +326,24 @@ export default function App() {
         }
         break;
       }
+      case "mouseControl": {
+        const { action: mAction, x, y } = (action as any).args;
+        fetch("/api/automate/mouse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: mAction, x, y }),
+        }).catch(console.error);
+        break;
+      }
+      case "keyboardControl": {
+        const { action: kAction, text } = (action as any).args;
+        fetch("/api/automate/keyboard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: kAction, text }),
+        }).catch(console.error);
+        break;
+      }
       case "manageFile":
       case "local_file": {
         const fAction = typeof action === "object" ? action.args.action : params[0];
@@ -417,12 +435,16 @@ export default function App() {
       case "playVideo":
       case "play_video": {
         const query = typeof action === "object" ? action.args.query : params.join(":");
+        const platform = typeof action === "object" ? (action as any).args.platform : "youtube";
         if (query) {
+          if (platform === "spotify") {
+            window.open(`https://open.spotify.com/search/${encodeURIComponent(query)}`, "_blank");
+          }
           setMessages((prev) => [...prev, { 
             id: Date.now().toString() + "-vid", 
             sender: "kyros", 
-            text: `I have initiated the visual stream for: ${query}. Synchronizing bandwidth...`,
-            videoUrl: `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}` 
+            text: `I have initiated the media stream for "${query}" on ${platform}. Synchronizing bandwidth...`,
+            videoUrl: platform === "youtube" ? `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}` : undefined
           }]);
         }
         break;

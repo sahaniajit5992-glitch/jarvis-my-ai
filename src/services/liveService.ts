@@ -231,11 +231,39 @@ export class LiveSessionManager {
                 parameters: { type: Type.OBJECT, properties: {} }
               },
               {
-                name: "playVideo",
-                description: "Plays a video in chat.",
+                name: "mouseControl",
+                description: "Moves the mouse or clicks.",
                 parameters: {
                   type: Type.OBJECT,
-                  properties: { query: { type: Type.STRING } },
+                  properties: { 
+                    action: { type: Type.STRING, enum: ["move", "click", "double_click", "right_click"] },
+                    x: { type: Type.NUMBER },
+                    y: { type: Type.NUMBER }
+                  },
+                  required: ["action"]
+                }
+              },
+              {
+                name: "keyboardControl",
+                description: "Types text or presses system keys.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { 
+                    action: { type: Type.STRING, enum: ["type", "press_key"] },
+                    text: { type: Type.STRING }
+                  },
+                  required: ["action", "text"]
+                }
+              },
+              {
+                name: "playVideo",
+                description: "Plays a video or music.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { 
+                    query: { type: Type.STRING },
+                    platform: { type: Type.STRING, enum: ["youtube", "spotify"] }
+                  },
                   required: ["query"]
                 }
               }

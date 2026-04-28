@@ -147,35 +147,81 @@ async function startServer() {
 
     if (platform === "win32") {
       const winCommands: Record<string, string> = {
-        chrome: "start chrome",
-        notepad: "notepad",
-        calculator: "calc",
-        explorer: "explorer",
-        vscode: "code",
-        spotify: "start spotify",
-        discord: "start discord",
+        chrome: "Start-Process 'chrome'",
+        vscode: "Start-Process 'code'",
+        spotify: "Start-Process 'spotify'",
+        discord: "Start-Process 'discord'",
+        notepad: "Start-Process 'notepad'",
+        calculator: "Start-Process 'calc'",
+        excel: "Start-Process 'excel'",
       };
-      cmd = winCommands[lowerApp] || `start ${appName}`;
+      const psCmd = winCommands[lowerApp] || `Start-Process '${appName}'`;
+      cmd = `powershell -Command "${psCmd}"`;
     } else if (platform === "darwin") {
       const macCommands: Record<string, string> = {
         chrome: "open -a 'Google Chrome'",
         vscode: "code",
         spotify: "open -a Spotify",
         discord: "open -a Discord",
-        notes: "open -a Notes",
       };
       cmd = macCommands[lowerApp] || `open -a ${appName}`;
     } else {
-      // Linux
       cmd = `xdg-open ${appName}`;
     }
     
     exec(cmd, (error) => {
       if (error) {
-        console.error(`Launch Error: ${error.message}`);
-        return res.status(500).json({ status: "error", message: `System denied access to ${appName}. Is it installed, sir?` });
+        // Fallback to start
+        exec(`start ${appName}`, (err2) => {
+          if (err2) return res.status(500).json({ status: "error", message: `System denied access to ${appName}.` });
+          res.json({ status: "success", message: `${appName} initialized via fallback.` });
+        });
+      } else {
+        res.json({ status: "success", message: `${appName} initialized.` });
       }
-      res.json({ status: "success", message: `${appName} initialized.` });
+    });
+  });
+
+  /**
+   * Mouse Control Endpoint (Windows PowerShell)
+   */
+  app.post("/api/automate/mouse", (req, res) => {
+    const { action, x, y } = req.body;
+    if (os.platform() !== "win32") return res.status(501).json({ error: "Only Windows supported for direct mouse control." });
+
+    let script = "";
+    if (action === "move" || action === "click") {
+      script = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x || 0}, ${y || 0});`;
+      if (action === "click") {
+        script += "$sig = '[DllImport(\"user32.dll\")] public static extern void mouse_event(int dwFlags, int dx, int dy, int dwData, int dwExtraInfo);'; $type = Add-Type -MemberDefinition $sig -Name 'Mouse' -Namespace 'Win32' -PassThru; $type::mouse_event(0x0002, 0, 0, 0, 0); $type::mouse_event(0x0004, 0, 0, 0, 0);";
+      }
+    }
+
+    exec(`powershell -Command "${script}"`, (error) => {
+      if (error) return res.status(500).json({ error: error.message });
+      res.json({ status: "success" });
+    });
+  });
+
+  /**
+   * Keyboard Control Endpoint (Windows PowerShell)
+   */
+  app.post("/api/automate/keyboard", (req, res) => {
+    const { action, text } = req.body;
+    if (os.platform() !== "win32") return res.status(501).json({ error: "Only Windows supported for keyboard control." });
+
+    let script = "";
+    if (action === "type") {
+      script = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${text}')`;
+    } else if (action === "press_key") {
+      const keyMap: Record<string, string> = { "enter": "{ENTER}", "tab": "{TAB}", "space": " " };
+      const key = keyMap[text.toLowerCase()] || text;
+      script = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${key}')`;
+    }
+
+    exec(`powershell -Command "${script}"`, (error) => {
+      if (error) return res.status(500).json({ error: error.message });
+      res.json({ status: "success" });
     });
   });
 
