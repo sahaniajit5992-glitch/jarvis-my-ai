@@ -75,16 +75,18 @@ export class LiveSessionManager {
   public onStateChange: (state: "idle" | "listening" | "processing" | "speaking") => void = () => {};
   public onMessage: (sender: "user" | "kyros", text: string) => void = () => {};
   public onCommand: (url: string) => void = () => {};
+  public onAction: (action: { name: string, args: any }) => void = () => {};
 
   constructor() {
-    this.ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const FALLBACK_KEY = "AIzaSyDnGYdEkvzgsL-oy9tJ17A1aVpS2DWI0CA";
+    const apiKey = (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "undefined") ? process.env.GEMINI_API_KEY : FALLBACK_KEY;
+    this.ai = new GoogleGenAI({ apiKey });
   }
 
   async start() {
     try {
       this.onStateChange("processing");
       
-      // Initialize Audio Contexts only when starting
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContextClass) {
         throw new Error("Web Audio API not supported in this browser.");
@@ -93,13 +95,11 @@ export class LiveSessionManager {
       this.audioContext = new AudioContextClass({ sampleRate: 16000 });
       this.playbackContext = new AudioContextClass({ sampleRate: 24000 });
       
-      // Crucial: Resume contexts to avoid "suspended" state lock
       if (this.audioContext.state === 'suspended') await this.audioContext.resume();
       if (this.playbackContext.state === 'suspended') await this.playbackContext.resume();
 
       this.nextPlayTime = this.playbackContext.currentTime;
 
-      // Get Microphone
       try {
         this.mediaStream = await navigator.mediaDevices.getUserMedia({ 
           audio: {
@@ -110,7 +110,6 @@ export class LiveSessionManager {
           } 
         });
       } catch (micError: any) {
-        // Detailed mic error handling
         let msg = "Microphone Access Denied";
         if (micError.name === 'NotAllowedError') msg = "Microphone permission was denied. Please enable it in browser settings.";
         else if (micError.name === 'NotFoundError') msg = "No microphone found. Please connect an audio input device.";
@@ -134,7 +133,6 @@ export class LiveSessionManager {
           pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
         }
         
-        // Convert to base64
         const buffer = new ArrayBuffer(pcm16.length * 2);
         const view = new DataView(buffer);
         for (let i = 0; i < pcm16.length; i++) {
@@ -173,16 +171,72 @@ export class LiveSessionManager {
           tools: [{
             functionDeclarations: [
               {
-                name: "executeBrowserAction",
-                description: "Open a website or perform a browser action (like opening YouTube, Spotify, or WhatsApp). Call this when the user asks to open a site, play a song, or send a message.",
+                name: "launchApp",
+                description: "Launches a local application (e.g., chrome, vscode, spotify, notepad, calculator).",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { appName: { type: Type.STRING } },
+                  required: ["appName"]
+                }
+              },
+              {
+                name: "executeCommand",
+                description: "Executes a shell or powershell command.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { 
+                    command: { type: Type.STRING },
+                    type: { type: Type.STRING, enum: ["shell", "powershell"] }
+                  },
+                  required: ["command", "type"]
+                }
+              },
+              {
+                name: "manageFile",
+                description: "Creates or reads a file on the user's Desktop.",
                 parameters: {
                   type: Type.OBJECT,
                   properties: {
-                    actionType: { type: Type.STRING, description: "Type of action: 'open', 'youtube', 'spotify', 'whatsapp'" },
-                    query: { type: Type.STRING, description: "The search query, website name, or message content." },
-                    target: { type: Type.STRING, description: "The target phone number for WhatsApp, if applicable." }
+                    action: { type: Type.STRING, enum: ["create", "read"] },
+                    fileName: { type: Type.STRING },
+                    content: { type: Type.STRING }
                   },
-                  required: ["actionType", "query"]
+                  required: ["action", "fileName"]
+                }
+              },
+              {
+                name: "searchWeb",
+                description: "Searches the web.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { 
+                    query: { type: Type.STRING },
+                    provider: { type: Type.STRING, enum: ["google", "youtube", "spotify"] }
+                  },
+                  required: ["query", "provider"]
+                }
+              },
+              {
+                name: "getWeather",
+                description: "Gets current weather.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { location: { type: Type.STRING } },
+                  required: ["location"]
+                }
+              },
+              {
+                name: "getSystemStatus",
+                description: "Retrieves CPU and RAM metrics.",
+                parameters: { type: Type.OBJECT, properties: {} }
+              },
+              {
+                name: "playVideo",
+                description: "Plays a video in chat.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { query: { type: Type.STRING } },
+                  required: ["query"]
                 }
               }
             ]
@@ -194,62 +248,42 @@ export class LiveSessionManager {
             this.onStateChange("listening");
           },
           onmessage: async (message: LiveServerMessage) => {
-            // Handle Audio Output
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio) {
               this.onStateChange("speaking");
               this.playAudioChunk(base64Audio);
             }
 
-            // Handle Interruption
             if (message.serverContent?.interrupted) {
               this.stopPlayback();
               this.onStateChange("listening");
             }
 
-            // Handle Transcriptions
             const modelText = message.serverContent?.modelTurn?.parts?.[0]?.text;
             if (modelText) {
               this.onMessage("kyros", modelText);
             }
 
-            // Handle User Audio Transcription
             if ((message as any).serverContent?.inputTranscript) {
               this.onMessage("user", (message as any).serverContent.inputTranscript);
             }
 
-            // Handle Function Calls
             const functionCalls = message.toolCall?.functionCalls;
             if (functionCalls && functionCalls.length > 0) {
               for (const call of functionCalls) {
-                if (call.name === "executeBrowserAction") {
-                  const args = call.args as any;
-                  let url = "";
-                  if (args.actionType === "youtube") {
-                    url = `https://www.youtube.com/results?search_query=${encodeURIComponent(args.query)}`;
-                  } else if (args.actionType === "spotify") {
-                    url = `https://open.spotify.com/search/${encodeURIComponent(args.query)}`;
-                  } else if (args.actionType === "whatsapp") {
-                    url = `https://web.whatsapp.com/send?phone=${args.target || ''}&text=${encodeURIComponent(args.query)}`;
-                  } else {
-                    let website = args.query.replace(/\s+/g, "");
-                    if (!website.includes(".")) website += ".com";
-                    url = `https://www.${website}`;
-                  }
-                  
-                  this.onCommand(url);
-                  
-                  // Send tool response
-                  this.sessionPromise?.then(session => {
-                     session.sendToolResponse({
-                       functionResponses: [{
-                         name: call.name,
-                         id: call.id,
-                         response: { result: "Action executed successfully in the browser." }
-                       }]
-                     });
-                  });
-                }
+                // Execute action via callback
+                this.onAction({ name: call.name, args: call.args });
+                
+                // Feedback
+                this.sessionPromise?.then(session => {
+                   session.sendToolResponse({
+                     functionResponses: [{
+                       name: call.name,
+                       id: call.id,
+                       response: { result: "Action executed successfully, sir." }
+                     }]
+                   });
+                });
               }
             }
           },
@@ -257,8 +291,11 @@ export class LiveSessionManager {
             console.log("Live API Closed");
             this.stop();
           },
-          onerror: (err) => {
+          onerror: (err: any) => {
             console.error("Live API Error:", err);
+            if (err?.message?.includes("429") || err?.status === 429) {
+               this.onMessage("kyros", "Sir, your API key is on limit. I'm afraid we've reached the quota for now.");
+            }
             this.stop();
           }
         }

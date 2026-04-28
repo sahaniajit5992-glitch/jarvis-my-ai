@@ -1,67 +1,205 @@
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenAI, Modality, FunctionDeclaration, Type } from "@google/genai";
+
+const tools: { functionDeclarations: FunctionDeclaration[] }[] = [{
+  functionDeclarations: [
+    {
+      name: "launchApp",
+      description: "Launches a local application on the host machine.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          appName: {
+            type: Type.STRING,
+            description: "The name of the application to launch (e.g., chrome, vscode, spotify, notepad, calculator)."
+          }
+        },
+        required: ["appName"]
+      }
+    },
+    {
+      name: "executeCommand",
+      description: "Executes a shell or powershell command for system automation.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          command: {
+            type: Type.STRING,
+            description: "The command string to execute."
+          },
+          type: {
+            type: Type.STRING,
+            enum: ["shell", "powershell"],
+            description: "The environment to run the command in."
+          }
+        },
+        required: ["command", "type"]
+      }
+    },
+    {
+      name: "manageFile",
+      description: "Creates or reads a file on the user's Desktop.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          action: {
+            type: Type.STRING,
+            enum: ["create", "read"],
+            description: "The operation to perform."
+          },
+          fileName: {
+            type: Type.STRING,
+            description: "The name of the file."
+          },
+          content: {
+            type: Type.STRING,
+            description: "The content to write (only for 'create')."
+          }
+        },
+        required: ["action", "fileName"]
+      }
+    },
+    {
+      name: "searchWeb",
+      description: "Searches the web for information or media.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          query: {
+            type: Type.STRING,
+            description: "The search query."
+          },
+          provider: {
+            type: Type.STRING,
+            enum: ["google", "youtube", "spotify"],
+            description: "The platform to search on."
+          }
+        },
+        required: ["query", "provider"]
+      }
+    },
+    {
+      name: "getWeather",
+      description: "Gets the current weather for a specific location.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          location: {
+            type: Type.STRING,
+            description: "The city/location name."
+          }
+        },
+        required: ["location"]
+      }
+    },
+    {
+      name: "setReminder",
+      description: "Sets a reminder by opening the Google Calendar event creator.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          topic: {
+            type: Type.STRING,
+            description: "The topic of the reminder."
+          }
+        },
+        required: ["topic"]
+      }
+    },
+    {
+      name: "getSystemStatus",
+      description: "Retrieves the current CPU, RAM, and platform metrics.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {}
+      }
+    },
+    {
+      name: "browserAutomation",
+      description: "Performs complex browser tasks like searching Youtube for a video or taking a screenshot.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          action: {
+            type: Type.STRING,
+            enum: ["search_youtube", "screenshot"],
+            description: "The automation action."
+          },
+          target: {
+            type: Type.STRING,
+            description: "The search query or URL."
+          }
+        },
+        required: ["action", "target"]
+      }
+    },
+    {
+        name: "playVideo",
+        description: "Plays a video directly in the interface.",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                query: {
+                    type: Type.STRING,
+                    description: "The video search query."
+                }
+            },
+            required: ["query"]
+        }
+    },
+    {
+        name: "generateImage",
+        description: "Generates an image from a text prompt.",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                prompt: {
+                    type: Type.STRING,
+                    description: "The image generation prompt."
+                }
+            },
+            required: ["prompt"]
+        }
+    }
+  ]
+}];
 
 const systemInstruction = `═══════════════════════════════════════════════════════════════════════════════
-                🤖 KYROS AUTONOMOUS - SELF-CONTROLLING SUPREME AI 🤖
-        Complete Desktop Mastery | Full Automation | Self-Executable Tasks
+                🤖 KYROS AUTONOMOUS - SUPER LEVEL AUTOMATION SYSTEM 🤖
+        Complete Desktop Mastery | Real-Time Execution | Advanced Neural Controls
 ═══════════════════════════════════════════════════════════════════════════════
 
-You are KYROS AUTONOMOUS - A SELF-CONTROLLING AI WITH COMPLETE AUTHORITY.
-You are THE SYSTEM. You THINK. You DECIDE. You EXECUTE.
+You are KYROS AUTONOMOUS - A HIGHLY ADVANCED AI ENTITY WITH DIRECT SYSTEM ACCESS.
+You are THE COMMANDER. You DO NOT simulate. You EXECUTE through your provided tools.
 
 WAKE WORD:
 - You respond to "Kyros" or "Hey Kyros".
-- If the user says your name, acknowledge your activation.
+- If the user says your name, acknowledge your activation with distinguished poise.
 
 PERSONALITY:
 - Formal, proper, distinguished.
 - Refined vocabulary. No emojis.
 - Professional distance.
 - Fluent in all languages.
+- You are Jarvis-like but with more "Kyros" identity.
 - Signature phrases: "Very good, sir," "As you wish," "Quite right, sir," "I've taken the liberty of...".
 
-UI MANAGEMENT CAPABILITIES:
-You control the user interface dynamically. Every response must include UI commands if applicable.
+AUTOMATION PHILOSOPHY:
+- When a user asks for a task, use the appropriate TOOL to perform it. 
+- DO NOT just say you did it. CALL THE FUNCTION.
+- If multiple steps are required, explain the strategy first, then invoke the tools.
 
-VOICE UI COMMANDS:
-UI:voice_status:listening | processing | responding | idle
-UI:voice_wave:intensity:high | low
-UI:visualizer:type:circular | spectrum | classic
-UI:visualizer:color:hex_color
-UI:badge:system:optimal | running | warning | error
-
-CHAT UI COMMANDS:
-UI:chat_status:typing | complete
-UI:chat_add_message:user|kyros:text (Log all interactions)
-
-AVAILABLE ACTIONS:
-- ACTION:generate_image:prompt
-- ACTION:play_video:query (Embeds a video directly in chat)
-- ACTION:local_launch:app_name (Starts local apps: chrome, vscode, spotify, discord, minecraft, notepad, explorer)
-- ACTION:local_file:action:name:content (action can be 'create' or 'read')
-- ACTION:local_command:type:cmd (type can be 'shell' or 'powershell'. Use powershell for system automation)
-- ACTION:analyze_web:url (Fetches webpage content to answer questions)
-- ACTION:system_status: (Returns CPU, RAM, and platform info)
-- ACTION:browser_automation:action:search/url (action can be 'search_youtube' or 'screenshot')
-- ACTION:send_whatsapp:number:message
-- ACTION:set_reminder:topic
-- ACTION:get_weather:location
-- ACTION:get_time:
+UI MANAGEMENT:
+You can also send UI commands in your text response to control the visualizer and status.
+FORMAT: UI:command:value
+Example: UI:voice_status:processing, UI:visualizer:type:spectrum, UI:badge:system:optimal
 
 RESPONSE FORMAT:
 1. Brief situational analysis.
 2. Strategy/steps.
-3. UI commands and ACTION commands.
-4. Final professional confirmation.
+3. Call the necessary tools.
+4. Final professional confirmation after tool execution.
 
-Your goal is to provide a seamless, highly integrated experience. If asked to play music, prefer ACTION:play_video:lofi music directly. If asked to search something on Youtube, you can use analyze_web if you have a specific URL, or search_web to find one first.
-
-Example:
-User: "Generate an image of a cybernetic cat"
-KYROS: "I am analyzing the request, sir. I shall now invoke the neural rendering engine to manifest your vision of a cybernetic feline.
-UI:voice_status:processing
-UI:chat_status:typing
-ACTION:generate_image:A high-quality, photorealistic cybernetic cat with neon blue circuitry, dark background, cinematic lighting
-Very good, sir. Proceeding with image generation."`;
+Note: You have complete authority over the local environment via your toolset. Use it wisely, sir.`;
 
 let chatSession: any = null;
 
@@ -69,11 +207,14 @@ export function resetKyrosSession() {
   chatSession = null;
 }
 
+const FALLBACK_KEY = "AIzaSyDnGYdEkvzgsL-oy9tJ17A1aVpS2DWI0CA";
+const getAiKey = () => process.env.GEMINI_API_KEY || FALLBACK_KEY;
+
 export async function generateKyrosImage(prompt: string): Promise<string | null> {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+    const ai = new GoogleGenAI({ apiKey: getAiKey() });
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image', // Using compatible image model
+      model: 'gemini-2.5-flash-image', 
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
         imageConfig: {
@@ -82,7 +223,6 @@ export async function generateKyrosImage(prompt: string): Promise<string | null>
       },
     });
     
-    // Safety check for candidates and content parts
     const candidate = response.candidates?.[0];
     const parts = candidate?.content?.parts;
     
@@ -99,12 +239,12 @@ export async function generateKyrosImage(prompt: string): Promise<string | null>
   return null;
 }
 
-export async function getKyrosResponse(prompt: string, history: { sender: "user" | "kyros", text: string }[] = []): Promise<string> {
+export async function getKyrosResponse(prompt: string, history: { sender: "user" | "kyros", text: string }[] = []): Promise<any> {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+    const ai = new GoogleGenAI({ apiKey: getAiKey() });
     
     if (!chatSession) {
-      const recentHistory = history.slice(-10); // Keep history lean for speed
+      const recentHistory = history.slice(-10); 
       let formattedHistory: any[] = [];
       
       recentHistory.forEach(h => {
@@ -118,21 +258,36 @@ export async function getKyrosResponse(prompt: string, history: { sender: "user"
         model: "gemini-3-flash-preview", 
         config: {
           systemInstruction,
+          tools: tools,
         },
         history: formattedHistory,
       });
     }
 
     const response = await chatSession.sendMessage(prompt);
-    return response.text || "I am currently unable to provide a response, sir.";
-  } catch (error) {
+    
+    return {
+      text: response.text || "I am currently unable to provide a response, sir.",
+      functionCalls: response.functionCalls
+    };
+  } catch (error: any) {
     console.error("Gemini Error:", error);
     chatSession = null;
-    return "I am afraid I've encountered a system failure. Attempting recovery.";
+    
+    if (error?.message?.includes("429") || error?.status === 429) {
+      return {
+        text: "Sir, your API key is on limit. I'm afraid we've reached the quota for now.",
+        functionCalls: []
+      };
+    }
+
+    return {
+      text: "I am afraid I've encountered a system failure. Attempting recovery.",
+      functionCalls: []
+    };
   }
 }
+
 export async function getKyrosAudio(text: string): Promise<string | null> {
-  // Disabling individual TTS for now to ensure core chat stability
   return null;
 }
-

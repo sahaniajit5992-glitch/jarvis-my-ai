@@ -264,26 +264,193 @@ export default function App() {
     });
   }, []);
 
-  const executeAction = useCallback((actionString: string) => {
-    const parts = actionString.split(":");
-    if (parts.length < 2) return;
+  const executeAction = useCallback((action: string | { name: string, args: any }) => {
+    let command: string;
+    let params: any[];
 
-    const command = parts[1];
-    const params = parts.slice(2);
+    if (typeof action === "string") {
+      const parts = action.split(":");
+      if (parts.length < 2) return;
+      command = parts[1];
+      params = parts.slice(2);
+    } else {
+      command = action.name;
+      params = Object.values(action.args);
+      // Map function names to existing logic if needed, or handle directly
+    }
 
     switch (command) {
       case "open_website":
-        if (params[0]) {
-          let website = params[0].trim();
-          if (!website.includes(".")) website += ".com";
-          window.open(`https://www.${website}`, "_blank");
+      case "launchApp": {
+        const app = typeof action === "object" ? action.args.appName : params[0];
+        if (app) {
+          if (command === "launchApp") {
+            fetch("/api/automate/launch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ appName: app }),
+            }).catch(console.error);
+          } else {
+            let website = app.trim();
+            if (!website.includes(".")) website += ".com";
+            window.open(`https://www.${website}`, "_blank");
+          }
         }
         break;
+      }
       case "search_web":
-        if (params[0]) {
-          window.open(`https://www.google.com/search?q=${encodeURIComponent(params[0])}`, "_blank");
+      case "searchWeb": {
+        const query = typeof action === "object" ? action.args.query : params[0];
+        const provider = typeof action === "object" ? action.args.provider : "google";
+        if (query) {
+          if (provider === "youtube") {
+            window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, "_blank");
+          } else if (provider === "spotify") {
+            window.open(`https://open.spotify.com/search/${encodeURIComponent(query)}`, "_blank");
+          } else {
+            window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, "_blank");
+          }
         }
         break;
+      }
+      case "executeCommand":
+      case "local_command": {
+        const cmd = typeof action === "object" ? action.args.command : params[1];
+        const type = typeof action === "object" ? action.args.type : params[0];
+        if (cmd && type) {
+          fetch("/api/automate/command", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type, cmd }),
+          }).catch(console.error);
+        }
+        break;
+      }
+      case "manageFile":
+      case "local_file": {
+        const fAction = typeof action === "object" ? action.args.action : params[0];
+        const fileName = typeof action === "object" ? action.args.fileName : params[1];
+        const content = typeof action === "object" ? action.args.content : (params[2] || "");
+        
+        if (fAction && fileName) {
+          fetch("/api/automate/file", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: fAction, fileName, content }),
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (fAction === "read" && data.content) {
+               setMessages((prev) => [...prev, { 
+                 id: Date.now().toString() + "-file", 
+                 sender: "kyros", 
+                 text: `I've retrieved the data from ${fileName}:\n\n${data.content.substring(0, 500)}...` 
+               }]);
+            }
+          })
+          .catch(console.error);
+        }
+        break;
+      }
+      case "getWeather":
+      case "get_weather": {
+        const loc = typeof action === "object" ? action.args.location : params[0];
+        if (loc) {
+          window.open(`https://www.google.com/search?q=weather+in+${encodeURIComponent(loc)}`, "_blank");
+        }
+        break;
+      }
+      case "setReminder":
+      case "set_reminder": {
+        const topic = typeof action === "object" ? action.args.topic : params[0];
+        if (topic) {
+          window.open(`https://calendar.google.com/calendar/u/0/r/eventedit?text=${encodeURIComponent('Reminder: ' + topic)}`, "_blank");
+        }
+        break;
+      }
+      case "getSystemStatus":
+      case "system_status":
+        fetch("/api/system/status")
+          .then(res => res.json())
+          .then(data => {
+            if (data.status === "success") {
+              const { cpu, memory, platform, uptime } = data.data;
+              setMessages(prev => [...prev, {
+                id: Date.now().toString() + "-sys",
+                sender: "kyros",
+                text: `System Status Analysis:\n- Platform: ${platform}\n- CPU Load: ${cpu}%\n- Memory Usage: ${memory}%\n- Uptime: ${uptime}`
+              }]);
+            }
+          }).catch(console.error);
+        break;
+      case "browserAutomation":
+      case "browser_automation": {
+        const bAction = typeof action === "object" ? action.args.action : params[0];
+        const target = typeof action === "object" ? action.args.target : params[1];
+        if (bAction && target) {
+          fetch("/api/automate/browser", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: bAction, search: target, url: target }),
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (bAction === "search_youtube" && data.videoUrl) {
+              setMessages(prev => [...prev, {
+                id: Date.now().toString() + "-vid",
+                sender: "kyros",
+                text: `I've successfully navigated via automation. Here is the primary video stream, sir.`,
+                videoUrl: data.videoUrl.replace("watch?v=", "embed/")
+              }]);
+            } else if (bAction === "screenshot" && data.screenshot) {
+              setMessages(prev => [...prev, {
+                id: Date.now().toString() + "-shot",
+                sender: "kyros",
+                text: `Digital snapshot captured of ${target}, sir.`,
+                imageUrl: `data:image/png;base64,${data.screenshot}`
+              }]);
+            }
+          }).catch(console.error);
+        }
+        break;
+      }
+      case "playVideo":
+      case "play_video": {
+        const query = typeof action === "object" ? action.args.query : params.join(":");
+        if (query) {
+          setMessages((prev) => [...prev, { 
+            id: Date.now().toString() + "-vid", 
+            sender: "kyros", 
+            text: `I have initiated the visual stream for: ${query}. Synchronizing bandwidth...`,
+            videoUrl: `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}` 
+          }]);
+        }
+        break;
+      }
+      case "generateImage":
+      case "generate_image": {
+        const prompt = typeof action === "object" ? action.args.prompt : params.join(":");
+        if (prompt) {
+          (async () => {
+             const imageUrl = await generateKyrosImage(prompt);
+             if (imageUrl) {
+               setMessages((prev) => [...prev, { 
+                 id: Date.now().toString() + "-img", 
+                 sender: "kyros", 
+                 text: "I have generated the image as requested, sir.",
+                 imageUrl 
+               }]);
+             } else {
+                setMessages((prev) => [...prev, { 
+                  id: Date.now().toString() + "-err", 
+                  sender: "kyros", 
+                  text: "I apologize, sir, but I encountered an error during the rendering process." 
+                }]);
+             }
+          })();
+        }
+        break;
+      }
       case "open_youtube_search":
         if (params[0]) {
           window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(params[0])}`, "_blank");
@@ -311,18 +478,8 @@ export default function App() {
           window.open(`https://web.whatsapp.com/send?phone=${params[0]}&text=${encodeURIComponent(params[1])}`, "_blank");
         }
         break;
-      case "get_weather":
-        if (params[0]) {
-          window.open(`https://www.google.com/search?q=weather+in+${encodeURIComponent(params[0])}`, "_blank");
-        }
-        break;
       case "get_time":
         window.open(`https://www.google.com/search?q=current+time`, "_blank");
-        break;
-      case "set_reminder":
-        if (params[0]) {
-          window.open(`https://calendar.google.com/calendar/u/0/r/eventedit?text=${encodeURIComponent('Reminder: ' + params[0])}`, "_blank");
-        }
         break;
       case "play_music_genre":
         if (params[0]) {
@@ -332,91 +489,6 @@ export default function App() {
       case "get_news":
         if (params[0]) {
           window.open(`https://news.google.com/search?q=${encodeURIComponent(params[0])}`, "_blank");
-        }
-        break;
-      case "system_status":
-        fetch("/api/system/status")
-          .then(res => res.json())
-          .then(data => {
-            if (data.status === "success") {
-              const { cpu, memory, platform, uptime } = data.data;
-              setMessages(prev => [...prev, {
-                id: Date.now().toString() + "-sys",
-                sender: "kyros",
-                text: `System Status Analysis:\n- Platform: ${platform}\n- CPU Load: ${cpu}%\n- Memory Usage: ${memory}%\n- Uptime: ${uptime}`
-              }]);
-            }
-          }).catch(console.error);
-        break;
-      case "browser_automation":
-        if (params[0]) {
-          const action = params[0];
-          const queryOrUrl = params[1];
-          fetch("/api/automate/browser", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action, search: queryOrUrl, url: queryOrUrl }),
-          })
-          .then(res => res.json())
-          .then(data => {
-            if (action === "search_youtube" && data.videoUrl) {
-              setMessages(prev => [...prev, {
-                id: Date.now().toString() + "-vid",
-                sender: "kyros",
-                text: `I've successfully navigated via automation. Here is the primary video stream, sir.`,
-                videoUrl: data.videoUrl.replace("watch?v=", "embed/")
-              }]);
-            } else if (action === "screenshot" && data.screenshot) {
-              setMessages(prev => [...prev, {
-                id: Date.now().toString() + "-shot",
-                sender: "kyros",
-                text: `Digital snapshot captured of ${queryOrUrl}, sir.`,
-                imageUrl: `data:image/png;base64,${data.screenshot}`
-              }]);
-            }
-          }).catch(console.error);
-        }
-        break;
-      case "local_launch":
-        if (params[0]) {
-          fetch("/api/automate/launch", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ appName: params[0] }),
-          }).catch(console.error);
-        }
-        break;
-      case "local_command":
-        if (params[0] && params[1]) {
-          fetch("/api/automate/command", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: params[0], cmd: params[1] }),
-          }).catch(console.error);
-        }
-        break;
-      case "local_file":
-        if (params[0] && params[1]) {
-          const action = params[0];
-          const fileName = params[1];
-          const content = params[2] || "";
-          
-          fetch("/api/automate/file", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action, fileName, content }),
-          })
-          .then(res => res.json())
-          .then(data => {
-            if (action === "read" && data.content) {
-               setMessages((prev) => [...prev, { 
-                 id: Date.now().toString() + "-file", 
-                 sender: "kyros", 
-                 text: `I've retrieved the data from ${fileName}:\n\n${data.content.substring(0, 500)}...` 
-               }]);
-            }
-          })
-          .catch(console.error);
         }
         break;
       case "analyze_web":
@@ -431,45 +503,12 @@ export default function App() {
               });
               const data = await res.json();
               if (data.status === "success") {
-                const aiResponse = await getKyrosResponse(`Analyze this content from ${url} and explain it briefly: ${data.content}`, messages);
-                setMessages((prev) => [...prev, { id: Date.now().toString(), sender: "kyros", text: aiResponse }]);
+                const aiResult = await getKyrosResponse(`Analyze this content from ${url} and explain it briefly: ${data.content}`, messages);
+                setMessages((prev) => [...prev, { id: Date.now().toString(), sender: "kyros", text: aiResult.text }]);
               }
             } catch (err) {
               console.error(err);
             }
-          })();
-        }
-        break;
-      case "play_video":
-        if (params[0]) {
-          const query = params.join(":");
-          setMessages((prev) => [...prev, { 
-            id: Date.now().toString() + "-vid", 
-            sender: "kyros", 
-            text: `I have initiated the visual stream for: ${query}. Synchronizing bandwidth...`,
-            videoUrl: `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}` 
-          }]);
-        }
-        break;
-      case "generate_image":
-        if (params[0]) {
-          const prompt = params.join(":"); // Rejoin in case prompt has colons
-          (async () => {
-             const imageUrl = await generateKyrosImage(prompt);
-             if (imageUrl) {
-               setMessages((prev) => [...prev, { 
-                 id: Date.now().toString() + "-img", 
-                 sender: "kyros", 
-                 text: "I have generated the image as requested, sir.",
-                 imageUrl 
-               }]);
-             } else {
-                setMessages((prev) => [...prev, { 
-                  id: Date.now().toString() + "-err", 
-                  sender: "kyros", 
-                  text: "I apologize, sir, but I encountered an error during the rendering process." 
-                }]);
-             }
           })();
         }
         break;
@@ -495,10 +534,8 @@ export default function App() {
 
     const commandResult = processCommand(finalTranscript);
 
-    let responseText = "";
-
     if (commandResult.isBrowserAction) {
-      responseText = commandResult.action;
+      const responseText = commandResult.action;
       setMessages((prev) => [...prev, { id: Date.now().toString() + "-j", sender: "kyros", text: responseText }]);
       
       if (!isMuted) {
@@ -517,7 +554,8 @@ export default function App() {
         }
       }, 1500);
     } else {
-      responseText = await getKyrosResponse(finalTranscript, messagesRef.current);
+      const kyrosRes = await getKyrosResponse(finalTranscript, messagesRef.current);
+      const responseText = kyrosRes.text;
       
       const actionMatch = responseText.match(/ACTION:[\w:_.]+/g);
       const cleanResponse = responseText.replace(/ACTION:[\w:_.]+/g, "").replace(/UI:[\w:_.]+/g, "").trim();
@@ -536,7 +574,15 @@ export default function App() {
 
       setAppState("idle");
 
-      if (actionMatch) {
+      // Handle function calls if present
+      if (kyrosRes.functionCalls && kyrosRes.functionCalls.length > 0) {
+        setTimeout(() => {
+          kyrosRes.functionCalls.forEach((fc: any) => executeAction(fc));
+        }, 1200);
+      }
+
+      // Fallback to action matches if function calls were not used but actions were written in text
+      if (actionMatch && (!kyrosRes.functionCalls || kyrosRes.functionCalls.length === 0)) {
         setTimeout(() => {
           actionMatch.forEach(action => executeAction(action));
         }, 1200);
@@ -584,6 +630,10 @@ export default function App() {
           setTimeout(() => {
             window.open(url, "_blank");
           }, 1000);
+        };
+        
+        session.onAction = (action) => {
+          executeAction(action);
         };
 
         await session.start();

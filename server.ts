@@ -139,23 +139,41 @@ async function startServer() {
    */
   app.post("/api/automate/launch", (req, res) => {
     const { appName } = req.body;
-    console.log(`[Kyros] Attempting to launch: ${appName}`);
+    const platform = os.platform();
+    console.log(`[Kyros] Attempting to launch: ${appName} on ${platform}`);
     
-    const commands: Record<string, string> = {
-      chrome: "start chrome",
-      notepad: "notepad",
-      calculator: "calc",
-      explorer: "explorer",
-      vscode: "code",
-      spotify: "start spotify",
-      discord: "start discord",
-    };
+    let cmd = "";
+    const lowerApp = appName.toLowerCase();
 
-    const cmd = commands[appName.toLowerCase()] || `start ${appName}`;
+    if (platform === "win32") {
+      const winCommands: Record<string, string> = {
+        chrome: "start chrome",
+        notepad: "notepad",
+        calculator: "calc",
+        explorer: "explorer",
+        vscode: "code",
+        spotify: "start spotify",
+        discord: "start discord",
+      };
+      cmd = winCommands[lowerApp] || `start ${appName}`;
+    } else if (platform === "darwin") {
+      const macCommands: Record<string, string> = {
+        chrome: "open -a 'Google Chrome'",
+        vscode: "code",
+        spotify: "open -a Spotify",
+        discord: "open -a Discord",
+        notes: "open -a Notes",
+      };
+      cmd = macCommands[lowerApp] || `open -a ${appName}`;
+    } else {
+      // Linux
+      cmd = `xdg-open ${appName}`;
+    }
     
     exec(cmd, (error) => {
       if (error) {
-        return res.status(500).json({ status: "error", message: `System denied access to ${appName}` });
+        console.error(`Launch Error: ${error.message}`);
+        return res.status(500).json({ status: "error", message: `System denied access to ${appName}. Is it installed, sir?` });
       }
       res.json({ status: "success", message: `${appName} initialized.` });
     });
