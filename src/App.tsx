@@ -468,7 +468,7 @@ export default function App() {
             id: Date.now().toString() + "-vid", 
             sender: "kyros", 
             text: `I have initiated the stream for "${query}", Sir. Bringing it up for you.`,
-            videoUrl: platform === "youtube" ? `https://www.youtube.com/embed/videoseries?listType=search&list=${encodeURIComponent(query)}` : undefined
+            videoUrl: platform === "youtube" ? `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}` : undefined
           }]);
         }
         break;
@@ -667,7 +667,7 @@ export default function App() {
           parseUICommands(text);
 
           // Wake Word Detection
-          if (sender === "user" && (text.toLowerCase().includes("kyros") || text.toLowerCase().includes("hey kyros"))) {
+          if (sender === "user" && (text.toLowerCase().includes("kyros") || text.toLowerCase().includes("hey kyros") || text.toLowerCase().includes("jarvis"))) {
             console.log("Wake word detected in transcript");
           }
         };
