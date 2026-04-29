@@ -140,6 +140,8 @@ export default function App() {
   const [time, setTime] = useState(new Date());
   const [coreTemp, setCoreTemp] = useState(38);
   const [aiLoad, setAiLoad] = useState(72);
+  const [systemMetrics, setSystemMetrics] = useState({ cpu: 0, memory: 0 });
+  const [optimizationLevel, setOptimizationLevel] = useState(0);
   const [weather, setWeather] = useState<WeatherData | null>(null);
 
   useEffect(() => {
@@ -149,6 +151,41 @@ export default function App() {
       clearInterval(timer);
       clearInterval(tempTimer);
     };
+  }, []);
+
+  useEffect(() => {
+    const fetchSystemStatus = async () => {
+      try {
+        const res = await fetch("/api/system/status");
+        if (!res.ok) throw new Error("API not ready");
+        const data = await res.json();
+        if (data.status === "success") {
+          const cpu = parseFloat(data.data.cpu);
+          const mem = parseFloat(data.data.memory);
+          setSystemMetrics({ cpu, memory: mem });
+          setAiLoad(Math.round(cpu));
+
+          if (cpu > 80 || mem > 90) {
+            setOptimizationLevel(2);
+          } else if (cpu > 50 || mem > 70) {
+            setOptimizationLevel(1);
+          } else {
+            setOptimizationLevel(0);
+          }
+        }
+      } catch (e) {
+        // Fallback simulated metrics if API is missing/failing
+        const mockCpu = 20 + Math.abs(Math.sin(Date.now() / 10000)) * 40;
+        const mockMem = 45 + Math.random() * 10;
+        setSystemMetrics({ cpu: Math.round(mockCpu), memory: Math.round(mockMem) });
+        setAiLoad(Math.round(mockCpu));
+        setOptimizationLevel(0);
+      }
+    };
+
+    fetchSystemStatus();
+    const statusTimer = setInterval(fetchSystemStatus, 8000);
+    return () => clearInterval(statusTimer);
   }, []);
 
   const fetchWeather = async () => {
@@ -468,7 +505,7 @@ export default function App() {
             window.open(`https://open.spotify.com/search/${encodeURIComponent(query)}`, "_blank");
           }
           const embedUrl = platform === "youtube" 
-            ? `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}&autoplay=1` 
+            ? `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}&autoplay=1&mute=1` 
             : undefined;
 
           setMessages((prev) => [...prev, { 
@@ -629,8 +666,14 @@ export default function App() {
         setMessages(prev => [...prev, { 
           id: Date.now().toString() + "-exec", 
           sender: "kyros", 
-          text: "_System: Executing neural automation protocols..._" 
+          text: "_System: Neural automation sequence initiated. Sir, I am processing your request through the core protocols now._" 
         }]);
+      }
+
+      if (kyrosRes.functionCalls) {
+        kyrosRes.functionCalls.forEach((call: any) => {
+          executeAction(call);
+        });
       }
 
       if (!isMuted) {
@@ -825,12 +868,12 @@ export default function App() {
             <DataCard title="Sub-System Stats" icon={Shield}>
                <div className="flex flex-col gap-2">
                  {[
+                   { label: 'CPU_LOAD', val: `${systemMetrics.cpu}%`, color: systemMetrics.cpu > 50 ? 'text-amber-400' : 'text-green-400' },
+                   { label: 'MEM_LOAD', val: `${systemMetrics.memory}%`, color: systemMetrics.memory > 70 ? 'text-amber-400' : 'text-green-400' },
                    { label: 'MIC_LINK', val: micState === 'granted' ? 'GRANTED' : 'WAITING', color: micState === 'granted' ? 'text-green-400' : 'text-amber-400' },
                    { label: 'LOC_SENS', val: locState === 'granted' ? 'GRANTED' : 'WAITING', color: locState === 'granted' ? 'text-green-400' : 'text-amber-400' },
                    { label: 'OS_MTRX', val: 'STABLE' },
-                   { label: 'NET_MTRX', val: 'STABLE' },
-                   { label: 'SEC_MTRX', val: 'STABLE' },
-                   { label: 'AI_MTRX', val: 'STABLE' }
+                   { label: 'SEC_MTRX', val: 'STABLE' }
                  ].map(stat => (
                    <div key={stat.label} className="flex justify-between items-center text-[10px] font-mono border-b border-cyan-500/5 pb-1">
                      <span className="text-cyan-400/60 uppercase">{stat.label}</span>
@@ -888,7 +931,7 @@ export default function App() {
           {/* Middle Column: Visualizer */}
           <div className="md:col-span-6 flex flex-col items-center justify-center relative min-h-0 order-1 md:order-2">
             <div className="relative w-full flex-1 flex flex-col items-center justify-center">
-              <Visualizer state={appState} colorOverride={vizColor} intensityOverride={vizIntensity} mode={vizMode} />
+              <Visualizer state={appState} colorOverride={vizColor} intensityOverride={vizIntensity} mode={vizMode} optimizationLevel={optimizationLevel} />
               
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
                  <div className="w-[80%] h-[80%] border border-cyan-400/20 rounded-full animate-pulse" />

@@ -283,9 +283,9 @@ export async function getKyrosResponse(prompt: string, history: { sender: "user"
       });
 
       chatSession = ai.chats.create({
-        model: "gemini-2.0-flash", 
+        model: "gemini-3.1-pro-preview", 
         config: {
-          systemInstruction: systemInstruction + "\n\nCRITICAL: You MUST use tools/function calls for all automation requests (opening apps, searching web, playing music, managing files). If a tool exists for the user's request, use it. Do not just say you will do it, EXECUTE the tool.",
+          systemInstruction: systemInstruction + "\n\nCRITICAL: You MUST use tools/function calls for all automation requests (opening apps, searching web, playing music, managing files, coding). If a tool exists for the user's request, YOU MUST EXECUTE IT immediately. Do not just say you will do it, EMIT the function call.",
           tools: tools,
         },
         history: formattedHistory,
