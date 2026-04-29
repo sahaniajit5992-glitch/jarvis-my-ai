@@ -670,12 +670,6 @@ export default function App() {
         }]);
       }
 
-      if (kyrosRes.functionCalls) {
-        kyrosRes.functionCalls.forEach((call: any) => {
-          executeAction(call);
-        });
-      }
-
       if (!isMuted) {
         setAppState("speaking");
         const audioBase64 = await getKyrosAudio(responseText);
@@ -686,15 +680,12 @@ export default function App() {
 
       setAppState("idle");
 
-      // Handle function calls if present
+      // Handle function calls/actions AFTER response and potential audio
       if (kyrosRes.functionCalls && kyrosRes.functionCalls.length > 0) {
         setTimeout(() => {
           kyrosRes.functionCalls.forEach((fc: any) => executeAction(fc));
         }, 1200);
-      }
-
-      // Fallback to action matches if function calls were not used but actions were written in text
-      if (actionMatch && (!kyrosRes.functionCalls || kyrosRes.functionCalls.length === 0)) {
+      } else if (actionMatch) {
         setTimeout(() => {
           actionMatch.forEach(action => executeAction(action));
         }, 1200);
@@ -1095,7 +1086,9 @@ export default function App() {
                           <iframe 
                             src={m.videoUrl} 
                             className="w-full h-full" 
-                            allow="autoplay; encrypted-media; fullscreen" 
+                            allow="autoplay; encrypted-media; fullscreen; picture-in-picture" 
+                            allowFullScreen
+                            frameBorder="0"
                           />
                         </div>
                       )}
