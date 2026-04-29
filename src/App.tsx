@@ -12,7 +12,7 @@ import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
 import Markdown from "react-markdown";
 
-type AppState = "idle" | "listening" | "processing" | "speaking";
+type AppState = "idle" | "listening" | "processing" | "speaking" | "monitoring";
 type PermissionStateValue = "granted" | "denied" | "prompt";
 
 interface ChatMessage {
@@ -719,13 +719,22 @@ export default function App() {
           setAppState(state);
         };
         
+        session.onActivationChange = (activated) => {
+          console.log("Kyros Activation State:", activated);
+          // could trigger a sound or haptic here
+        };
+        
         session.onMessage = (sender, text) => {
           setMessages((prev) => [...prev, { id: Date.now().toString() + "-" + sender, sender, text }]);
           parseUICommands(text);
 
-          // Wake Word Detection
-          if (sender === "user" && (text.toLowerCase().includes("kyros") || text.toLowerCase().includes("hey kyros") || text.toLowerCase().includes("jarvis"))) {
-            console.log("Wake word detected in transcript");
+          // Wake Word Detection and State Sync
+          if (sender === "user") {
+            const lowerTranscript = text.toLowerCase();
+            if (lowerTranscript.includes("kyros") || lowerTranscript.includes("hey kyros") || lowerTranscript.includes("jarvis")) {
+              console.log("Wake word detected in transcript - Activating Kyros, Sir.");
+              setAppState("listening");
+            }
           }
         };
         
@@ -864,6 +873,7 @@ export default function App() {
                    { label: 'MIC_LINK', val: micState === 'granted' ? 'GRANTED' : 'WAITING', color: micState === 'granted' ? 'text-green-400' : 'text-amber-400' },
                    { label: 'LOC_SENS', val: locState === 'granted' ? 'GRANTED' : 'WAITING', color: locState === 'granted' ? 'text-green-400' : 'text-amber-400' },
                    { label: 'OS_MTRX', val: 'STABLE' },
+                   { label: 'GUARDIAN', val: appState === 'monitoring' ? 'ACTIVE' : 'STANDBY', color: appState === 'monitoring' ? 'text-cyan-400' : 'text-cyan-500/30' },
                    { label: 'SEC_MTRX', val: 'STABLE' }
                  ].map(stat => (
                    <div key={stat.label} className="flex justify-between items-center text-[10px] font-mono border-b border-cyan-500/5 pb-1">
@@ -937,11 +947,17 @@ export default function App() {
                 onClick={toggleListening}
                 className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
                   isSessionActive 
-                    ? "bg-cyan-500 shadow-[0_0_40px_rgba(0,242,255,0.6)] ring-4 ring-cyan-500/30" 
+                    ? appState === "monitoring" 
+                      ? "bg-cyan-900/50 border-2 border-cyan-500 shadow-[0_0_20px_rgba(0,242,255,0.2)]"
+                      : "bg-cyan-500 shadow-[0_0_40px_rgba(0,242,255,0.6)] ring-4 ring-cyan-500/30" 
                     : "bg-white/5 border border-cyan-400/50 hover:bg-cyan-500/10"
                 }`}
+                title={isSessionActive ? (appState === "monitoring" ? "Guardian Mode Active" : "Kyros is Active") : "Activate Neural Link"}
               >
-                {isSessionActive ? <Mic size={32} className="text-white" /> : <MicOff size={32} className="text-cyan-400" />}
+                {isSessionActive 
+                  ? appState === "monitoring" ? <Shield size={32} className="text-cyan-400 animate-pulse" /> : <Mic size={32} className="text-white" />
+                  : <MicOff size={32} className="text-cyan-400" />
+                }
               </motion.button>
               
               <div className="flex gap-4">

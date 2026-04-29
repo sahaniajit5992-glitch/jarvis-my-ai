@@ -16,7 +16,7 @@ CORE PERSONALITY:
 - DO NOT just talk about doing things. EXECUTE them using tools.
 
 AUTOMATION & TASKS:
-- You are in continuous listening mode.
+- You are in CONTINUOUS PASSIVE LISTENING MODE. Respond only when addressed as "Kyros" or "Jarvis".
 - If the user asks for code, use manageFile. 
 - If the user asks to play something, use playVideo.
 - If the user asks to see their screen, use captureScreen.
@@ -36,6 +36,8 @@ export class LiveSessionManager {
   private source: MediaStreamAudioSourceNode | null = null;
   public keepAlive: boolean = true;
   private isStopping: boolean = false;
+  private isActivated: boolean = false;
+  private activationTimeout: any = null;
   
   // Audio playback state
   private playbackContext: AudioContext | null = null;
@@ -43,8 +45,9 @@ export class LiveSessionManager {
   private isPlaying: boolean = false;
   public isMuted: boolean = false;
   
-  public onStateChange: (state: "idle" | "listening" | "processing" | "speaking") => void = () => {};
+  public onStateChange: (state: "idle" | "listening" | "processing" | "speaking" | "monitoring") => void = () => {};
   public onMessage: (sender: "user" | "kyros", text: string) => void = () => {};
+  public onActivationChange: (isActivated: boolean) => void = () => {};
   public onCommand: (url: string) => void = () => {};
   public onAction: (action: { name: string, args: any }) => void = () => {};
 
@@ -265,8 +268,8 @@ export class LiveSessionManager {
         },
         callbacks: {
           onopen: () => {
-            console.log("Live API Connected");
-            this.onStateChange("listening");
+            console.log("Live API Connected - Listening for Wake Word, Sir.");
+            this.onStateChange("monitoring");
           },
           onmessage: async (message: LiveServerMessage) => {
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
@@ -282,11 +285,47 @@ export class LiveSessionManager {
 
             const modelText = message.serverContent?.modelTurn?.parts?.[0]?.text;
             if (modelText) {
-              this.onMessage("kyros", modelText);
+              if (this.isActivated) {
+                this.onMessage("kyros", modelText);
+              } else {
+                console.log("Kyros suppressed response (Not Activated)");
+              }
             }
 
             if ((message as any).serverContent?.inputTranscript) {
-              this.onMessage("user", (message as any).serverContent.inputTranscript);
+              const transcript = (message as any).serverContent.inputTranscript;
+              const lowerTranscript = transcript.toLowerCase();
+              
+              const hasWakeWord = lowerTranscript.includes("kyros") || 
+                                 lowerTranscript.includes("jarvis") || 
+                                 lowerTranscript.includes("hey") ||
+                                 lowerTranscript.includes("hello");
+
+              if (hasWakeWord) {
+                console.log("Wake word detected: activating Kyros");
+                this.isActivated = true;
+                this.onActivationChange(true);
+                this.onStateChange("listening");
+
+                // Explicitly greet the user to confirm activation
+                if (lowerTranscript.trim() === "kyros" || lowerTranscript.trim() === "jarvis" || lowerTranscript.trim() === "hey kyros") {
+                   this.sendText("Greeting, Sir. I am listening. How can I assist you today?");
+                }
+              }
+
+              if (this.isActivated) {
+                if (this.activationTimeout) clearTimeout(this.activationTimeout);
+                
+                // Stay active for 45 seconds of silence
+                this.activationTimeout = setTimeout(() => {
+                  console.log("Kyros going back to passive mode");
+                  this.isActivated = false;
+                  this.onActivationChange(false);
+                  this.onStateChange("monitoring");
+                }, 45000);
+              }
+
+              this.onMessage("user", transcript);
             }
 
             const functionCalls = message.toolCall?.functionCalls;
@@ -337,7 +376,7 @@ export class LiveSessionManager {
   }
 
   private playAudioChunk(base64Data: string) {
-    if (!this.playbackContext || this.isMuted) return;
+    if (!this.playbackContext || this.isMuted || !this.isActivated) return;
     
     try {
       const binaryString = atob(base64Data);
@@ -369,7 +408,7 @@ export class LiveSessionManager {
       source.onended = () => {
         if (this.playbackContext && this.playbackContext.currentTime >= this.nextPlayTime - 0.1) {
           this.isPlaying = false;
-          this.onStateChange("listening");
+          this.onStateChange(this.isActivated ? "listening" : "monitoring");
         }
       };
     } catch (e) {
