@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { motion } from "motion/react";
 
-type VisualizerState = "idle" | "listening" | "processing" | "speaking" | "monitoring";
+type VisualizerState = "idle" | "listening" | "processing" | "speaking";
 
 interface VisualizerProps {
   state: VisualizerState;
@@ -16,7 +16,6 @@ export default function Visualizer({ state, colorOverride, intensityOverride, mo
     const base = (() => {
       switch (state) {
         case "listening": return { color: "#00f2ff", speed: 2, scale: 1.05 };
-        case "monitoring": return { color: "#0ea5e9", speed: 4, scale: 0.98 };
         case "processing": return { color: "#fbbf24", speed: 1, scale: 1.02 };
         case "speaking": return { color: "#00d4ff", speed: 0.5, scale: 1.1 };
         default: return { color: "rgba(0, 242, 255, 0.5)", speed: 10, scale: 1 };
@@ -122,7 +121,7 @@ export default function Visualizer({ state, colorOverride, intensityOverride, mo
           animate={{ opacity: 1, y: 0 }}
           className="text-[10px] font-mono tracking-[0.5em] text-cyan-400 uppercase glow-text"
         >
-          {state === "idle" ? "System Standby" : state === "monitoring" ? "Guardian Mode" : `${state} Protocol...`}
+          {state === "idle" ? "System Standby" : `${state} Protocol...`}
         </motion.span>
       </div>
     </div>
