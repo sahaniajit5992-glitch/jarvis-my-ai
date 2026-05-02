@@ -9,6 +9,7 @@ import PermissionGate from "./components/PermissionGate";
 import SettingsModal from "./components/SettingsModal";
 import SystemBar from "./components/SystemBar";
 import { playPCM } from "./utils/audioUtils";
+import { fetchWikipediaSummary, fetchStockQuote, fetchNewsBrief, getPollinationsUrl } from "./services/intelligenceService";
 import { motion, AnimatePresence } from "motion/react";
 import Markdown from "react-markdown";
 
@@ -303,309 +304,332 @@ export default function App() {
     });
   }, []);
 
-  const executeAction = useCallback((action: string | { name: string, args: any }) => {
+  const executeAction = useCallback(async (action: string | { name: string, args: any }) => {
     console.log("[Kyros] Executing Action:", action);
     let command: string;
     let params: any[];
 
     if (typeof action === "string") {
       const parts = action.split(":");
-      if (parts.length < 2) return;
+      if (parts.length < 2) return null;
       command = parts[1];
       params = parts.slice(2);
     } else {
       command = action.name;
       params = Object.values(action.args);
-      // Map function names to existing logic if needed, or handle directly
     }
 
-    switch (command) {
-      case "open_website":
-      case "launchApp": {
-        const app = typeof action === "object" ? action.args.appName : params[0];
-        if (app) {
-          if (command === "launchApp") {
-            fetch("/api/automate/launch", {
+    try {
+      switch (command) {
+        case "searchWikipedia": {
+          const topic = typeof action === "object" ? action.args.topic : params[0];
+          if (topic) {
+            const summary = await fetchWikipediaSummary(topic);
+            return summary || "I couldn't find a Wikipedia entry for that, sir.";
+          }
+          break;
+        }
+        case "getNews": {
+          const topic = typeof action === "object" ? action.args.topic : params[0];
+          if (topic) {
+            const news = await fetchNewsBrief(topic);
+            return news || `I've opened the news feed for ${topic} in your browser, sir.`;
+          }
+          break;
+        }
+        case "getStockQuote": {
+          const symbol = typeof action === "object" ? action.args.symbol : params[0];
+          if (symbol) {
+            const quote = await fetchStockQuote(symbol);
+            return quote || `I'm unable to retrieve the market data for ${symbol} at this moment, sir.`;
+          }
+          break;
+        }
+        case "setTimer": {
+          const seconds = typeof action === "object" ? action.args.seconds : parseInt(params[0]);
+          const label = typeof action === "object" ? action.args.label : (params[1] || "Timer");
+          if (!isNaN(seconds)) {
+            setTimeout(() => {
+              const msg = `Sir, your ${label} timer for ${seconds} seconds has completed.`;
+              setMessages(prev => [...prev, { id: Date.now().toString(), sender: "kyros", text: msg }]);
+            }, seconds * 1000);
+            return `Timer set for ${seconds} seconds, sir.`;
+          }
+          break;
+        }
+        case "setReminder": {
+          const text = typeof action === "object" ? action.args.text : params[0];
+          const delay = typeof action === "object" ? action.args.delaySeconds : parseInt(params[1]);
+          if (text && !isNaN(delay)) {
+            setTimeout(() => {
+              setMessages(prev => [...prev, { id: Date.now().toString(), sender: "kyros", text: `Sir, a reminder from the previous cycle: ${text}` }]);
+            }, delay * 1000);
+            return `Reminder scheduled, sir.`;
+          }
+          break;
+        }
+        case "open_website":
+        case "launchApp": {
+          const app = typeof action === "object" ? action.args.appName : params[0];
+          if (app) {
+            if (command === "launchApp") {
+              fetch("/api/automate/launch", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ appName: app }),
+              }).catch(console.error);
+              return `Initializing ${app} protocol, sir.`;
+            } else {
+              let website = app.trim();
+              if (!website.includes(".")) website += ".com";
+              window.open(`https://www.${website}`, "_blank");
+              return `Navigating to ${website}, sir.`;
+            }
+          }
+          break;
+        }
+        case "search_web":
+        case "searchWeb": {
+          const query = typeof action === "object" ? action.args.query : params[0];
+          const provider = typeof action === "object" ? action.args.provider : "google";
+          if (query) {
+            if (provider === "youtube") {
+              window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, "_blank");
+            } else if (provider === "spotify") {
+              window.open(`https://open.spotify.com/search/${encodeURIComponent(query)}`, "_blank");
+            } else {
+              window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, "_blank");
+            }
+            return `Searching for ${query} on ${provider}, sir.`;
+          }
+          break;
+        }
+        case "executeCommand":
+        case "local_command": {
+          const cmd = typeof action === "object" ? action.args.command : params[1];
+          const type = typeof action === "object" ? action.args.type : params[0];
+          if (cmd && type) {
+            fetch("/api/automate/command", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ appName: app }),
+              body: JSON.stringify({ type, cmd }),
             }).catch(console.error);
-          } else {
-            let website = app.trim();
-            if (!website.includes(".")) website += ".com";
-            window.open(`https://www.${website}`, "_blank");
+            return `Executing ${type} command sequence, sir.`;
           }
+          break;
         }
-        break;
-      }
-      case "search_web":
-      case "searchWeb": {
-        const query = typeof action === "object" ? action.args.query : params[0];
-        const provider = typeof action === "object" ? action.args.provider : "google";
-        if (query) {
-          if (provider === "youtube") {
-            window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, "_blank");
-          } else if (provider === "spotify") {
-            window.open(`https://open.spotify.com/search/${encodeURIComponent(query)}`, "_blank");
-          } else {
-            window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, "_blank");
-          }
-        }
-        break;
-      }
-      case "executeCommand":
-      case "local_command": {
-        const cmd = typeof action === "object" ? action.args.command : params[1];
-        const type = typeof action === "object" ? action.args.type : params[0];
-        if (cmd && type) {
-          fetch("/api/automate/command", {
+        case "mouseControl": {
+          const { action: mAction, x, y } = (action as any).args;
+          fetch("/api/automate/mouse", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type, cmd }),
+            body: JSON.stringify({ action: mAction, x, y }),
           }).catch(console.error);
+          return "Processing haptic input adjustment, sir.";
         }
-        break;
-      }
-      case "mouseControl": {
-        const { action: mAction, x, y } = (action as any).args;
-        fetch("/api/automate/mouse", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: mAction, x, y }),
-        }).catch(console.error);
-        break;
-      }
-      case "keyboardControl": {
-        const { action: kAction, text } = (action as any).args;
-        fetch("/api/automate/keyboard", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: kAction, text }),
-        }).catch(console.error);
-        break;
-      }
-      case "manageFile":
-      case "local_file": {
-        const fAction = typeof action === "object" ? action.args.action : params[0];
-        const fileName = typeof action === "object" ? action.args.fileName : params[1];
-        const content = typeof action === "object" ? action.args.content : (params[2] || "");
-        
-        if (fAction && fileName) {
-          fetch("/api/automate/file", {
+        case "keyboardControl": {
+          const { action: kAction, text } = (action as any).args;
+          fetch("/api/automate/keyboard", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: fAction, fileName, content }),
-          })
-          .then(res => res.json())
-          .then(data => {
-            if (fAction === "read" && data.content) {
-               setMessages((prev) => [...prev, { 
-                 id: Date.now().toString() + "-file", 
-                 sender: "kyros", 
-                 text: `I've retrieved the data from ${fileName}:\n\n${data.content.substring(0, 500)}...` 
-               }]);
-            }
-          })
-          .catch(console.error);
-        }
-        break;
-      }
-      case "getWeather":
-      case "get_weather": {
-        const loc = typeof action === "object" ? action.args.location : params[0];
-        if (loc) {
-          window.open(`https://www.google.com/search?q=weather+in+${encodeURIComponent(loc)}`, "_blank");
-        }
-        break;
-      }
-      case "setReminder":
-      case "set_reminder": {
-        const topic = typeof action === "object" ? action.args.topic : params[0];
-        if (topic) {
-          window.open(`https://calendar.google.com/calendar/u/0/r/eventedit?text=${encodeURIComponent('Reminder: ' + topic)}`, "_blank");
-        }
-        break;
-      }
-      case "getSystemStatus":
-      case "system_status":
-        fetch("/api/system/status")
-          .then(res => res.json())
-          .then(data => {
-            if (data.status === "success") {
-              const { cpu, memory, platform, uptime } = data.data;
-              setMessages(prev => [...prev, {
-                id: Date.now().toString() + "-sys",
-                sender: "kyros",
-                text: `System Status Analysis:\n- Platform: ${platform}\n- CPU Load: ${cpu}%\n- Memory Usage: ${memory}%\n- Uptime: ${uptime}`
-              }]);
-            }
+            body: JSON.stringify({ action: kAction, text }),
           }).catch(console.error);
-        break;
-      case "browserAutomation":
-      case "browser_automation": {
-        const bAction = typeof action === "object" ? action.args.action : params[0];
-        const target = typeof action === "object" ? action.args.target : params[1];
-        if (bAction && target) {
+          return "Neural key-sequence injected, sir.";
+        }
+        case "manageFile":
+        case "local_file": {
+          const fAction = typeof action === "object" ? action.args.action : params[0];
+          const fileName = typeof action === "object" ? action.args.fileName : params[1];
+          const content = typeof action === "object" ? action.args.content : (params[2] || "");
+          
+          if (fAction && fileName) {
+            fetch("/api/automate/file", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: fAction, fileName, content }),
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (fAction === "read" && data.content) {
+                 setMessages((prev) => [...prev, { 
+                   id: Date.now().toString() + "-file", 
+                   sender: "kyros", 
+                   text: `I've retrieved the data from ${fileName}:\n\n${data.content.substring(0, 500)}...` 
+                 }]);
+              }
+            })
+            .catch(console.error);
+            return `${fAction === 'create' ? 'Writing' : 'Accessing'} ${fileName} on storage matrix, sir.`;
+          }
+          break;
+        }
+        case "getWeather":
+        case "get_weather": {
+          const loc = typeof action === "object" ? action.args.location : params[0];
+          if (loc) {
+            window.open(`https://www.google.com/search?q=weather+in+${encodeURIComponent(loc)}`, "_blank");
+            return `Scanning thermal patterns for ${loc}, sir.`;
+          }
+          break;
+        }
+        case "getSystemStatus":
+        case "system_status":
+          fetch("/api/system/status")
+            .then(res => res.json())
+            .then(data => {
+              if (data.status === "success") {
+                const { cpu, memory, platform, uptime } = data.data;
+                setMessages(prev => [...prev, {
+                  id: Date.now().toString() + "-sys",
+                  sender: "kyros",
+                  text: `System Status Analysis:\n- Platform: ${platform}\n- CPU Load: ${cpu}%\n- Memory Usage: ${memory}%\n- Uptime: ${uptime}`
+                }]);
+              }
+            }).catch(console.error);
+          return "Synchronizing system metrics, sir.";
+        case "setSystemVolume":
+        case "set_volume": {
+          const vol = typeof action === "object" ? action.args.volume : parseInt(params[0]);
+          if (!isNaN(vol)) {
+            fetch("/api/system/volume", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ volume: vol }),
+            })
+            .then(res => res.json())
+            .then(async data => {
+              const msg = data.status === "success" 
+                ? `Sir, I have turned your system volume to ${vol}.`
+                : `Sir, I encountered an error adjusting the volume: ${data.message}`;
+              setMessages(prev => [...prev, { id: Date.now().toString() + "-vol", sender: "kyros", text: msg }]);
+              if (!isMuted) {
+                setAppState("speaking");
+                const audio = await getKyrosAudio(msg);
+                if (audio) await playPCM(audio);
+                setAppState("idle");
+              }
+            }).catch(console.error);
+            return `Adjusting volume to ${vol}, sir.`;
+          }
+          break;
+        }
+        case "captureScreen": {
           fetch("/api/automate/browser", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: bAction, search: target, url: target }),
+            body: JSON.stringify({ action: "screenshot" }),
           })
           .then(res => res.json())
           .then(data => {
-            if (bAction === "search_youtube" && data.videoUrl) {
+            if (data.screenshot) {
               setMessages(prev => [...prev, {
-                id: Date.now().toString() + "-vid",
+                id: Date.now().toString() + "-view",
                 sender: "kyros",
-                text: `I've successfully navigated via automation. Here is the primary video stream, sir.`,
-                videoUrl: data.videoUrl.replace("watch?v=", "embed/")
-              }]);
-            } else if (bAction === "screenshot" && data.screenshot) {
-              setMessages(prev => [...prev, {
-                id: Date.now().toString() + "-shot",
-                sender: "kyros",
-                text: `Digital snapshot captured of ${target}, sir.`,
+                text: "I've captured the current view, Sir. Analyzing your workspace now.",
                 imageUrl: `data:image/png;base64,${data.screenshot}`
               }]);
             }
           }).catch(console.error);
+          return "Visual core engaged. Snapshot in progress, sir.";
         }
-        break;
-      }
-      case "sendWhatsApp": {
-        const { recipient, message } = (action as any).args;
-        window.open(`https://web.whatsapp.com/send?phone=${recipient}&text=${encodeURIComponent(message)}`, "_blank");
-        break;
-      }
-      case "captureScreen": {
-        fetch("/api/automate/browser", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "screenshot" }),
-        })
-        .then(res => res.json())
-        .then(data => {
-          if (data.screenshot) {
-            setMessages(prev => [...prev, {
-              id: Date.now().toString() + "-view",
-              sender: "kyros",
-              text: "I've captured the current view, Sir. Analyzing your workspace now.",
-              imageUrl: `data:image/png;base64,${data.screenshot}`
-            }]);
-          }
-        }).catch(console.error);
-        break;
-      }
-      case "playVideo":
-      case "play_video": {
-        const query = typeof action === "object" ? action.args.query : params.join(":");
-        const platform = typeof action === "object" ? (action as any).args.platform : "youtube";
-        if (query) {
-          if (platform === "spotify") {
-            window.open(`https://open.spotify.com/search/${encodeURIComponent(query)}`, "_blank");
-          }
-          const embedUrl = platform === "youtube" 
-            ? `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}&autoplay=1&mute=1` 
-            : undefined;
+        case "playVideo":
+        case "play_video": {
+          const query = typeof action === "object" ? action.args.query : params.join(":");
+          const platform = typeof action === "object" ? (action as any).args.platform : "youtube";
+          if (query) {
+            if (platform === "spotify") {
+              window.open(`https://open.spotify.com/search/${encodeURIComponent(query)}`, "_blank");
+            }
+            const embedUrl = platform === "youtube" 
+              ? `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(query)}&autoplay=1&mute=1` 
+              : undefined;
 
-          setMessages((prev) => [...prev, { 
-            id: Date.now().toString() + "-vid", 
-            sender: "kyros", 
-            text: `Sir, I've located the media stream for "${query}". Initiating playback on ${platform} now.`,
-            videoUrl: embedUrl
-          }]);
+            setMessages((prev) => [...prev, { 
+              id: Date.now().toString() + "-vid", 
+              sender: "kyros", 
+              text: `Sir, I've located the media stream for "${query}". Initiating playback on ${platform} now.`,
+              videoUrl: embedUrl
+            }]);
+            return `Streaming ${query} on ${platform}, sir.`;
+          }
+          break;
         }
-        break;
-      }
-      case "generateImage":
-      case "generate_image": {
-        const prompt = typeof action === "object" ? action.args.prompt : params.join(":");
-        if (prompt) {
-          (async () => {
-             const imageUrl = await generateKyrosImage(prompt);
-             if (imageUrl) {
+        case "generateImage":
+        case "generate_image": {
+          const prompt = typeof action === "object" ? action.args.prompt : params.join(":");
+          if (prompt) {
+            (async () => {
+               // Use Pollinations for a "free upgrade" feel
+               const imageUrl = getPollinationsUrl(prompt);
                setMessages((prev) => [...prev, { 
                  id: Date.now().toString() + "-img", 
                  sender: "kyros", 
-                 text: "I have generated the image as requested, sir.",
+                 text: "I have manifested the visual representation as requested, sir.",
                  imageUrl 
                }]);
-             } else {
-                setMessages((prev) => [...prev, { 
-                  id: Date.now().toString() + "-err", 
-                  sender: "kyros", 
-                  text: "I apologize, sir, but I encountered an error during the rendering process." 
-                }]);
-             }
-          })();
+            })();
+            return "Engaging visual manifestation protocols, sir.";
+          }
+          break;
         }
-        break;
-      }
-      case "open_youtube_search":
-        if (params[0]) {
-          window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(params[0])}`, "_blank");
-        }
-        break;
-      case "open_spotify_search":
-        if (params[0]) {
-          window.open(`https://open.spotify.com/search/${encodeURIComponent(params[0])}`, "_blank");
-        }
-        break;
-      case "open_gmail":
-        window.open(`https://mail.google.com`, "_blank");
-        break;
-      case "open_whatsapp_web":
-        window.open(`https://web.whatsapp.com`, "_blank");
-        break;
-      case "play_music":
-      case "play_youtube_video":
-        if (params[0]) {
-          window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(params[0])}`, "_blank");
-        }
-        break;
-      case "send_whatsapp":
-        if (params[0] && params[1]) {
-          window.open(`https://web.whatsapp.com/send?phone=${params[0]}&text=${encodeURIComponent(params[1])}`, "_blank");
-        }
-        break;
-      case "get_time":
-        window.open(`https://www.google.com/search?q=current+time`, "_blank");
-        break;
-      case "play_music_genre":
-        if (params[0]) {
-          window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(params[0] + ' music')}`, "_blank");
-        }
-        break;
-      case "get_news":
-        if (params[0]) {
-          window.open(`https://news.google.com/search?q=${encodeURIComponent(params[0])}`, "_blank");
-        }
-        break;
-      case "analyze_web":
-        if (params[0]) {
-          const url = params[0];
-          (async () => {
-            try {
-              const res = await fetch("/api/scrape", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url }),
-              });
-              const data = await res.json();
-              if (data.status === "success") {
-                const aiResult = await getKyrosResponse(`Analyze this content from ${url} and explain it briefly: ${data.content}`, messages);
-                setMessages((prev) => [...prev, { id: Date.now().toString(), sender: "kyros", text: aiResult.text }]);
+        case "open_youtube_search":
+          if (params[0]) {
+            window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(params[0])}`, "_blank");
+            return "YouTube search protocol active, sir.";
+          }
+          break;
+        case "open_spotify_search":
+          if (params[0]) {
+            window.open(`https://open.spotify.com/search/${encodeURIComponent(params[0])}`, "_blank");
+            return "Spotify search protocol active, sir.";
+          }
+          break;
+        case "open_gmail":
+          window.open(`https://mail.google.com`, "_blank");
+          return "Communication hub opened, sir.";
+        case "open_whatsapp_web":
+          window.open(`https://web.whatsapp.com`, "_blank");
+          return "WhatsApp Web bridge active, sir.";
+        case "get_time":
+          return `Current time is ${new Date().toLocaleTimeString()}, sir.`;
+        case "get_news":
+          if (params[0]) {
+            window.open(`https://news.google.com/search?q=${encodeURIComponent(params[0])}`, "_blank");
+            return `Intelligence scanning for ${params[0]} news, sir.`;
+          }
+          break;
+        case "analyze_web":
+          if (params[0]) {
+            const url = params[0];
+            (async () => {
+              try {
+                const res = await fetch("/api/scrape", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ url }),
+                });
+                const data = await res.json();
+                if (data.status === "success") {
+                  const aiResult = await getKyrosResponse(`Analyze this content from ${url} and explain it briefly: ${data.content}`, messagesRef.current);
+                  setMessages((prev) => [...prev, { id: Date.now().toString(), sender: "kyros", text: aiResult.text }]);
+                }
+              } catch (err) {
+                console.error(err);
               }
-            } catch (err) {
-              console.error(err);
-            }
-          })();
-        }
-        break;
-      default:
-        console.warn("Unknown command:", command);
+            })();
+            return "Scraping digital data for analysis, sir.";
+          }
+          break;
+        default:
+          console.warn("Unknown command:", command);
+          return "Protocol not recognized, sir.";
+      }
+    } catch (error) {
+      console.error("Action execution failed:", error);
+      return "Sir, I encountered an operational discrepancy in the automation layer.";
     }
-  }, []);
+    return "Action sequence complete, sir.";
+  }, [messagesRef]);
 
   const handleTextCommand = useCallback(async (finalTranscript: string) => {
     if (!finalTranscript.trim()) {
@@ -672,7 +696,7 @@ export default function App() {
 
       if (!isMuted) {
         setAppState("speaking");
-        const audioBase64 = await getKyrosAudio(responseText);
+        const audioBase64 = await getKyrosAudio(cleanResponse);
         if (audioBase64) {
           await playPCM(audioBase64);
         }

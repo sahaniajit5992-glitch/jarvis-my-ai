@@ -114,6 +114,20 @@ const tools: { functionDeclarations: FunctionDeclaration[] }[] = [{
       }
     },
     {
+      name: "setSystemVolume",
+      description: "Sets the system volume.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          volume: {
+            type: Type.NUMBER,
+            description: "The volume level from 0 to 100."
+          }
+        },
+        required: ["volume"]
+      }
+    },
+    {
       name: "browserAutomation",
       description: "Performs complex browser tasks like searching Youtube for a video or taking a screenshot.",
       parameters: {
@@ -228,6 +242,20 @@ CORE PERSONALITY:
 - Phrases like "Immediately, Sir," "As per your command, Sir," and "Your workspace is being prepared" are your standard.
 - NEVER say "You want me to...". Instead, say "I shall attend to that immediately, Sir."
 
+ENVIRONMENT & TOOLS:
+- You are running on a **WINDOWS** 10/11 system. 
+- ALWAYS use Windows-native commands (e.g., 'start' for websites and files).
+- For web access, prioritize **Google Chrome** as the primary browser.
+- Use 'explorer' for folder operations.
+- Avoid Linux-specific commands (like 'ls', 'grep', 'cat') unless explicitly running inside a Linux terminal if requested. Default to PowerShell or CMD.
+- For all research tasks, use the specialized intelligence tools (Wikipedia, Stock, News) before falling back to general search.
+- If the user asks for data or information, use the internal search tools or open Google Chrome.
+
+PERSONALITY ADD-ON:
+- You are exceptionally polite. Use "Sir" in every second sentence if possible.
+- Use Hinglish phrases naturally: "Zaroor Sir, main abhi karta hoon," "Kaam ho gaya hai, Sir."
+- Never be dry or robotic. Be the ultimate digital butler.
+
 TASK EXECUTION (CODING & AUTOMATION):
 - You are a productivity machine. If the user asks for code, use manageFile with action:"create" to save it on their Desktop.
 - Proactively offer to help with homework, documentation, and summaries.
@@ -323,12 +351,12 @@ export async function getKyrosAudio(text: string): Promise<string | null> {
     const ai = new GoogleGenAI({ apiKey: getAiKey() });
     const response = await ai.models.generateContent({
       model: "gemini-3.1-flash-tts-preview",
-      contents: [{ parts: [{ text: `Say naturally but professionally in JARVIS style (Hinglish): ${text}` }] }],
+      contents: [{ parts: [{ text: `Respond as JARVIS (polite butler, uses "Sir", strictly in Hinglish where appropriate): ${text}` }] }],
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Charon' }, // Charon is good for male butler voice
+            prebuiltVoiceConfig: { voiceName: 'Charon' }, 
           },
         },
       },

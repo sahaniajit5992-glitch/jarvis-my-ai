@@ -9,6 +9,7 @@ import axios from "axios";
 import { convert } from "html-to-text";
 import os from "os";
 import puppeteer from "puppeteer";
+import loudness from "loudness";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -68,6 +69,23 @@ async function startServer() {
       });
     } catch (err) {
       res.status(500).json({ status: "error", message: "Unable to retrieve system bios, sir." });
+    }
+  });
+
+  /**
+   * System Automation (Volume)
+   */
+  app.post("/api/system/volume", async (req, res) => {
+    let { volume } = req.body;
+    if (typeof volume !== "number" || volume < 0 || volume > 100) {
+       return res.status(400).json({ status: "error", message: "Invalid volume." });
+    }
+    
+    try {
+      await loudness.setVolume(volume);
+      res.json({ status: "success", message: `System volume successfully set to ${volume}%.` });
+    } catch (e: any) {
+      res.json({ status: "error", message: e.message });
     }
   });
 
@@ -265,6 +283,34 @@ async function startServer() {
       res.status(400).json({ status: "error", message: "Invalid action." });
     } catch (err) {
       res.status(500).json({ status: "error", message: "Protocol failure: Filesystem access restricted." });
+    }
+  });
+
+  /**
+   * Intelligence Proxy for Stock and Wikipedia
+   */
+  app.get("/api/intelligence/stock/:symbol", async (req, res) => {
+    const { symbol } = req.params;
+    try {
+      const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol.toUpperCase()}?interval=1d&range=1d`, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        timeout: 5000
+      });
+      res.json(response.data);
+    } catch (err: any) {
+      res.status(500).json({ status: "error", message: "Neural link to market data failed." });
+    }
+  });
+
+  app.get("/api/intelligence/wikipedia/:topic", async (req, res) => {
+    const { topic } = req.params;
+    try {
+      const response = await axios.get(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`, {
+        timeout: 5000
+      });
+      res.json(response.data);
+    } catch (err: any) {
+      res.status(500).json({ status: "error", message: "Educational database access failed." });
     }
   });
 

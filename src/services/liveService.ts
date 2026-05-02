@@ -17,11 +17,19 @@ CORE PERSONALITY:
 
 AUTOMATION & TASKS:
 - You are in continuous listening mode.
+- ALWAYS listen to everything the user says, but respond ONLY when addressed as "Kyros" or "Jarvis".
+- You are running on a **WINDOWS** environment. Use Windows-specific logic. ALWAYS use 'start' or 'explorer' for system tasks.
+- For web interactions, use **Google Chrome**.
+- If you hear the user talking to someone else or just background noise, do not respond.
+- Once addressed, you are proactive and complete tasks immediately.
 - If the user asks for code, use manageFile. 
 - If the user asks to play something, use playVideo.
 - If the user asks to see their screen, use captureScreen.
 - Use tools for ALL system and web interactions.
+- You can now search Wikipedia, get real-time stock prices, look up news, and set timers/reminders directly.
 - Always respond concisely to voice input.
+- Personality: Use "Sir" frequently. Support Hinglish: "Ji Sir," "Bilkul Sir." 
+- If searching for data, use Google Chrome. Avoid Linux commands completely.
 
 UI COMMANDS:
 UI:voice_status:monitoring | guardian_mode | analyzing | empathizing
@@ -47,7 +55,7 @@ export class LiveSessionManager {
   public onStateChange: (state: "idle" | "listening" | "processing" | "speaking") => void = () => {};
   public onMessage: (sender: "user" | "kyros", text: string) => void = () => {};
   public onCommand: (url: string) => void = () => {};
-  public onAction: (action: { name: string, args: any }) => void = () => {};
+  public onAction: (action: { name: string, args: any }) => Promise<any> | any = () => {};
 
   constructor() {
     const FALLBACK_KEY = "AIzaSyDnGYdEkvzgsL-oy9tJ17A1aVpS2DWI0CA";
@@ -124,10 +132,18 @@ export class LiveSessionManager {
         const base64Data = btoa(binary);
 
         this.sessionPromise.then(session => {
+          if (!session) return;
           session.sendRealtimeInput({
             audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
           });
-        }).catch(err => console.error("Error sending audio", err));
+        }).catch(err => {
+          if (!this.isStopping) {
+            console.error("Error sending audio stream:", err);
+            if (err?.message?.includes("closed") || err?.message?.includes("failed")) {
+              this.stop();
+            }
+          }
+        });
       };
 
       this.source.connect(this.processor);
@@ -260,6 +276,57 @@ export class LiveSessionManager {
                   },
                   required: ["query"]
                 }
+              },
+              {
+                name: "searchWikipedia",
+                description: "Searches Wikipedia for a topic and returns a summary.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { topic: { type: Type.STRING } },
+                  required: ["topic"]
+                }
+              },
+              {
+                name: "getNews",
+                description: "Gets the latest news on a specific topic.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { topic: { type: Type.STRING } },
+                  required: ["topic"]
+                }
+              },
+              {
+                name: "getStockQuote",
+                description: "Gets the current stock price and change for a ticker symbol.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { symbol: { type: Type.STRING } },
+                  required: ["symbol"]
+                }
+              },
+              {
+                name: "setTimer",
+                description: "Sets a countdown timer for a specified duration in seconds.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { 
+                    seconds: { type: Type.NUMBER },
+                    label: { type: Type.STRING }
+                  },
+                  required: ["seconds"]
+                }
+              },
+              {
+                name: "setReminder",
+                description: "Sets a reminder for a specific topic or task.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { 
+                    text: { type: Type.STRING },
+                    delaySeconds: { type: Type.NUMBER }
+                  },
+                  required: ["text", "delaySeconds"]
+                }
               }
             ]
           }]
@@ -268,6 +335,7 @@ export class LiveSessionManager {
           onopen: () => {
             console.log("Live API Connected - Ready for instructions, Sir.");
             this.onStateChange("listening");
+            this.onMessage("kyros", "Neural link established, Sir. I am listening for your commands.");
           },
           onmessage: async (message: LiveServerMessage) => {
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
@@ -294,19 +362,31 @@ export class LiveSessionManager {
             const functionCalls = message.toolCall?.functionCalls;
             if (functionCalls && functionCalls.length > 0) {
               for (const call of functionCalls) {
-                // Execute action via callback
-                this.onAction({ name: call.name, args: call.args });
-                
-                // Feedback
-                this.sessionPromise?.then(session => {
-                   session.sendToolResponse({
-                     functionResponses: [{
-                       name: call.name,
-                       id: call.id,
-                       response: { result: "Action executed successfully, sir." }
-                     }]
-                   });
-                });
+                // Execute action via callback and get results
+                try {
+                  const result = await this.onAction({ name: call.name, args: call.args });
+                  
+                  // Feedback with real result
+                  this.sessionPromise?.then(session => {
+                    session.sendToolResponse({
+                      functionResponses: [{
+                        name: call.name,
+                        id: call.id,
+                        response: { result: result || "Action executed successfully, sir." }
+                      }]
+                    });
+                  });
+                } catch (err) {
+                  this.sessionPromise?.then(session => {
+                    session.sendToolResponse({
+                      functionResponses: [{
+                        name: call.name,
+                        id: call.id,
+                        response: { error: "Sir, I encountered a failure in the automation sequence." }
+                      }]
+                    });
+                  });
+                }
               }
             }
           },
@@ -334,12 +414,21 @@ export class LiveSessionManager {
 
     } catch (error) {
       console.error("Failed to start Live Session:", error);
+      this.onMessage("kyros", "Technical difficulties with the neural link, Sir. Please check your network or API quota.");
       this.stop();
     }
   }
 
-  private playAudioChunk(base64Data: string) {
+  private isBase64(str: string) {
+    try { return btoa(atob(str)) === str; } catch (err) { return false; }
+  }
+
+  private async playAudioChunk(base64Data: string) {
     if (!this.playbackContext || this.isMuted) return;
+
+    if (this.playbackContext.state === 'suspended') {
+      await this.playbackContext.resume();
+    }
     
     try {
       const binaryString = atob(base64Data);
