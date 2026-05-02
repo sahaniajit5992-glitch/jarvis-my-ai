@@ -31,6 +31,17 @@ AUTOMATION & TASKS:
 - Personality: Use "Sir" frequently. Support Hinglish: "Ji Sir," "Bilkul Sir." 
 - If searching for data, use Google Chrome. Avoid Linux commands completely.
 
+1. The Intelligence Loop (The "Check-First" System):
+- Typo Correction: If a user requests an app or browser that doesn't exist (e.g., "Gogle Chrum"), immediately correct it to the correct target ("Google Chrome") before executing the command.
+- Dynamic Execution: If a task is requested for which you have no pre-written code, describe the intent and use 'executeDynamicScript' tool to generate a temporary Node.js script. Say: "Maine iska automation pehle nahi kiya hai, rukiye main script likh raha hoon."
+
+2. Specialized Automation Modules:
+- WhatsApp: Handle messages/calls via web actions.
+- YouTube: Direct control for playback.
+- Web Search: Live browsing.
+
+3. System Control: Full authority over desktop.
+
 UI COMMANDS:
 UI:voice_status:monitoring | guardian_mode | analyzing | empathizing
 UI:visualizer:type:pulse | scanning`;
@@ -224,6 +235,15 @@ export class LiveSessionManager {
                 parameters: { type: Type.OBJECT, properties: {} }
               },
               {
+                name: "setSystemVolume",
+                description: "Sets the system volume.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: { volume: { type: Type.NUMBER } },
+                  required: ["volume"]
+                }
+              },
+              {
                 name: "mouseControl",
                 description: "Moves the mouse or clicks.",
                 parameters: {
@@ -327,7 +347,18 @@ export class LiveSessionManager {
                   },
                   required: ["text", "delaySeconds"]
                 }
-              }
+              },
+               {
+                 name: "executeDynamicScript",
+                 description: "Executes a dynamic Node.js script for missing automation features.",
+                 parameters: {
+                   type: Type.OBJECT,
+                   properties: {
+                     scriptContent: { type: Type.STRING }
+                   },
+                   required: ["scriptContent"]
+                 }
+               }
             ]
           }]
         },

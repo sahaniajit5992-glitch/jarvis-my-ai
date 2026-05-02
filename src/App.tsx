@@ -572,6 +572,31 @@ export default function App() {
           }
           break;
         }
+        case "executeDynamicScript": {
+          const scriptContent = typeof action === "object" ? action.args.scriptContent : null;
+          if (scriptContent) {
+            fetch("/api/automate/script", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ scriptContent }),
+            })
+            .then(res => res.json())
+            .then(async data => {
+              const msg = data.status === "success" 
+                ? `Sir, the dynamic execution has concluded. Output: ${data.output.toString().slice(0, 100)}`
+                : `Sir, I encountered an error during dynamic execution: ${data.message}`;
+              setMessages(prev => [...prev, { id: Date.now().toString() + "-script", sender: "kyros", text: msg }]);
+              if (!isMuted) {
+                setAppState("speaking");
+                const audio = await getKyrosAudio(msg);
+                if (audio) await playPCM(audio);
+                setAppState("idle");
+              }
+            }).catch(console.error);
+            return "Maine iska automation pehle nahi kiya hai, rukiye main script likh raha hoon.";
+          }
+          break;
+        }
         case "open_youtube_search":
           if (params[0]) {
             window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(params[0])}`, "_blank");

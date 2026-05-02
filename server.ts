@@ -138,7 +138,34 @@ async function startServer() {
   });
 
   /**
+   * Dynamic Script Execution (Missing Code Fallback)
+   */
+  app.post("/api/automate/script", async (req, res) => {
+    const { scriptContent } = req.body;
+    if (!scriptContent) {
+      return res.status(400).json({ status: "error", message: "No script provided." });
+    }
+    try {
+      const tempFile = path.join(os.tmpdir(), `kyros_script_${Date.now()}.js`);
+      await fs.promises.writeFile(tempFile, scriptContent, 'utf-8');
+      
+      exec(`node ${tempFile}`, async (error, stdout, stderr) => {
+        // Try to clean up
+        try { await fs.promises.unlink(tempFile); } catch (e) {}
+
+        if (error) {
+           return res.json({ status: "error", message: stderr || error.message });
+        }
+        res.json({ status: "success", output: stdout });
+      });
+    } catch (e: any) {
+      res.status(500).json({ status: "error", message: e.message });
+    }
+  });
+
+  /**
    * Web Scraper for AI Context
+
    */
   app.post("/api/scrape", async (req, res) => {
     const { url } = req.body;
