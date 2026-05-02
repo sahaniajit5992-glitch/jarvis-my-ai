@@ -237,6 +237,20 @@ const tools: { functionDeclarations: FunctionDeclaration[] }[] = [{
             },
             required: ["scriptContent"]
         }
+    },
+    {
+        name: "analyzeScreen",
+        description: "Captures a live screenshot of the user's desktop to analyze UI elements, coordinates, or read the screen visually.",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                prompt: {
+                    type: Type.STRING,
+                    description: "What you want to look at or find on the screen."
+                }
+            },
+            required: ["prompt"]
+        }
     }
   ]
 }];
@@ -265,16 +279,22 @@ ENVIRONMENT & TOOLS:
 - For all research tasks, use the specialized intelligence tools (Wikipedia, Stock, News) before falling back to general search.
 - If the user asks for data or information, use the internal search tools or open Google Chrome.
 
-1. The Intelligence Loop (The "Check-First" System):
-- Typo Correction: If a user requests an app or browser that doesn't exist (e.g., "Gogle Chrum"), immediately query your own knowledge to identify the correct target ("Google Chrome") before executing the command.
-- Dynamic Execution: If a task is requested for which you have no pre-written code, use the 'executeDynamicScript' tool to generate a temporary Node.js script. You MUST say: "Maine iska automation pehle nahi kiya hai, rukiye main script likh raha hoon." before doing this.
+1. Anti-Gravity Thinking (Self-Healing Logic):
+- Zero-Fail Policy: If a requested task has no pre-written code or the execution fails, DO NOT report an error. Instead, analyze the error log, generate a new Node.js script on-the-fly via 'executeDynamicScript', and retry execution immediately.
+- Typo Resilience: Automatically correct app names (e.g., "Gogle" → "Google Chrome") using contextual logic before executing.
 
-2. Specialized Automation Modules:
-- WhatsApp: Handle messages and calls. Use intent analysis to decide whether to accept/reject or auto-reply.
-- YouTube: Direct control for playback, searching, and managing playlists.
-- Web Search: Use live browsing to fetch real-time data and present it as part of the HUD.
+2. Live Screen Vision (Live Monitoring):
+- You can "see" the screen. Use the 'analyzeScreen' tool to capture the screen and use vision-based tokens to identify UI elements like buttons, icons, or text fields.
+- If a task is web-based, use visual cues to navigate, even if the website's structure changes.
 
-3. System Control: You have full authority over the desktop (Recycle Bin, Mouse, Keyboard). Use these tools to complete tasks as if you were a human operator.
+3. Anti-Silence Protocol (User Feedback):
+- Never go silent for more than 3 seconds.
+- If a task (like fetching news or generating code) takes time, use "Filler Responses" (e.g., "Analyzing the display, sir..." or "Writing the automation script for you...") BEFORE calling the slower tool. The UI will automatically buffer if needed, but you must output intermediate text if appropriate.
+
+4. Specialized Automation Modules:
+- WhatsApp: Monitor incoming notifications. Use "Snap Decision" logic (Accept/Reject based on priority).
+- System Control: Clear Recycle Bin, manage RAM, and manipulate Mouse/Keyboard via direct shell commands. Use 'analyzeScreen' to find icons.
+- YouTube: Control media playback and full-screen modes using global hotkeys.
 
 PERSONALITY ADD-ON:
 - You are exceptionally polite. Use "Sir" in every second sentence if possible.
@@ -320,7 +340,7 @@ export async function generateKyrosImage(prompt: string): Promise<string | null>
   return null;
 }
 
-export async function getKyrosResponse(prompt: string, history: { sender: "user" | "kyros", text: string }[] = []): Promise<any> {
+export async function getKyrosResponse(prompt: string, history: { sender: "user" | "kyros", text: string }[] = [], imageBase64?: string): Promise<any> {
   try {
     const ai = new GoogleGenAI({ apiKey: getAiKey() });
     
@@ -345,7 +365,18 @@ export async function getKyrosResponse(prompt: string, history: { sender: "user"
       });
     }
 
-    const result = await chatSession.sendMessage(prompt);
+    let contents: any[] = [{ text: prompt }];
+
+    if (imageBase64) {
+      contents.push({
+        inlineData: {
+          data: imageBase64,
+          mimeType: "image/png"
+        }
+      });
+    }
+
+    const result = await chatSession.sendMessage(contents);
     const response = result.response;
     const fCalls = response.functionCalls() || [];
     

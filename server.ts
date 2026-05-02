@@ -73,6 +73,19 @@ async function startServer() {
   });
 
   /**
+   * Capture system screenshot
+   */
+  app.get("/api/system/screenshot", async (req, res) => {
+    try {
+      const screenshot = (await import('screenshot-desktop')).default;
+      const img = await screenshot({ format: 'png' });
+      res.json({ status: "success", imageBase64: img.toString('base64') });
+    } catch (e: any) {
+      res.status(500).json({ status: "error", message: e.message });
+    }
+  });
+
+  /**
    * System Automation (Volume)
    */
   app.post("/api/system/volume", async (req, res) => {

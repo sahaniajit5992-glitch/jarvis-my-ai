@@ -597,6 +597,29 @@ export default function App() {
           }
           break;
         }
+        case "analyzeScreen": {
+          const prompt = typeof action === "object" ? action.args.prompt : params.join(" ");
+          if (prompt) {
+             fetch("/api/system/screenshot")
+              .then(res => res.json())
+              .then(async data => {
+                 if (data.status === "success" && data.imageBase64) {
+                    const aiResult = await getKyrosResponse(`Analyze this screenshot according to this prompt: ${prompt}`, messagesRef.current, data.imageBase64);
+                    setMessages((prev) => [...prev, { id: Date.now().toString(), sender: "kyros", text: aiResult.text }]);
+                    if (!isMuted) {
+                      setAppState("speaking");
+                      const audio = await getKyrosAudio(aiResult.text.replace(/ACTION:[\w:_.]+/g, "").trim());
+                      if (audio) await playPCM(audio);
+                      setAppState("idle");
+                    }
+                 } else {
+                    setMessages((prev) => [...prev, { id: Date.now().toString(), sender: "kyros", text: "Sir, I failed to capture the screen. The graphical interface might not be active, or I lack permissions." }]);
+                 }
+              });
+             return "Analyzing the screen digitally, sir...";
+          }
+          break;
+        }
         case "open_youtube_search":
           if (params[0]) {
             window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(params[0])}`, "_blank");
@@ -698,7 +721,21 @@ export default function App() {
         }
       }, 1500);
     } else {
+      let timeoutId: any;
+      if (!isMuted) {
+         timeoutId = setTimeout(async () => {
+             setMessages((prev) => [...prev, { id: Date.now().toString() + "-filler", sender: "kyros", text: "Analyzing the request, sir. Please wait a moment..." }]);
+             setAppState("speaking");
+             const audioBase64 = await getKyrosAudio("Analyzing the request, sir. Please wait a moment.");
+             if (audioBase64) { await playPCM(audioBase64); }
+             setAppState("processing");
+         }, 3000);
+      }
+
       const kyrosRes = await getKyrosResponse(finalTranscript, messagesRef.current);
+      
+      if (timeoutId) clearTimeout(timeoutId);
+
       const responseText = kyrosRes.text;
       
       const actionMatch = responseText.match(/ACTION:[\w:_.]+/g);
