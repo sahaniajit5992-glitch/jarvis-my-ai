@@ -225,6 +225,20 @@ const tools: { functionDeclarations: FunctionDeclaration[] }[] = [{
         }
     },
     {
+        name: "generateVideo",
+        description: "Generates a video from a text prompt. This is a very slow process, please inform the user to wait.",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                prompt: {
+                    type: Type.STRING,
+                    description: "The video generation prompt."
+                }
+            },
+            required: ["prompt"]
+        }
+    },
+    {
         name: "executeDynamicScript",
         description: "Executes a dynamic Node.js script for automation tasks that don't have predefined tools.",
         parameters: {
@@ -328,19 +342,68 @@ const getAiKey = () => process.env.GEMINI_API_KEY || FALLBACK_KEY;
 
 export async function generateKyrosImage(prompt: string): Promise<string | null> {
   try {
-    // Using Pollinations for demo as it's reliable and free for a prototype
-    const encodedPrompt = encodeURIComponent(prompt);
-    const imageUrl = `https://pollinations.ai/p/${encodedPrompt}?width=1024&height=1024&seed=${Math.floor(Math.random() * 1000)}&model=flux`;
+    const ai = new GoogleGenAI({ apiKey: getAiKey() });
+    const response = await ai.models.generateImages({
+      model: 'gemini-3.1-flash-image-preview',
+      prompt: prompt,
+      config: {
+        numberOfImages: 1,
+        outputMimeType: 'image/jpeg',
+        aspectRatio: '16:9', // Wide format
+      },
+    });
     
-    // Test if image is valid/loading (optional, but good for UI)
-    return imageUrl;
+    if (response.generatedImages && response.generatedImages.length > 0) {
+      const base64EncodeString = response.generatedImages[0].image.imageBytes;
+      return `data:image/jpeg;base64,${base64EncodeString}`;
+    }
   } catch (error) {
     console.error("Image Gen Error:", error);
   }
   return null;
 }
 
-export async function getKyrosResponse(prompt: string, history: { sender: "user" | "kyros", text: string }[] = [], imageBase64?: string): Promise<any> {
+export async function generateKyrosVideo(prompt: string, onUpdate?: (status: string) => void): Promise<string | null> {
+  try {
+    const ai = new GoogleGenAI({ apiKey: getAiKey() });
+    onUpdate?.("Initiating video generation with Veo 2.0...");
+    let operation = await ai.models.generateVideos({
+      model: 'veo-3.1-lite-generate-preview',
+      prompt: prompt,
+      config: {
+        numberOfVideos: 1,
+        resolution: '720p',
+        aspectRatio: '16:9'
+      }
+    });
+
+    onUpdate?.("Video generation in progress. This may take a few minutes. Please hold...");
+
+    while (!operation.done) {
+      await new Promise(resolve => setTimeout(resolve, 10000));
+      operation = await ai.operations.getVideosOperation({operation: operation});
+      onUpdate?.(`Still generating your video. Operation status: ${operation.done ? 'Completed' : 'Running'}...`);
+    }
+
+    const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+    if (downloadLink) {
+      onUpdate?.("Video generated. Downloading...");
+      const response = await fetch(downloadLink, {
+        method: 'GET',
+        headers: {
+          'x-goog-api-key': getAiKey(),
+        },
+      });
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    }
+  } catch (error) {
+    console.error("Video Gen Error:", error);
+  }
+  return null;
+}
+
+export async function getKyrosResponse(prompt: string, history: { sender: "user" | "kyros", text: string }[] = [], imageBase64?: string, wakeWord: string = "Kyros"): Promise<any> {
   try {
     const ai = new GoogleGenAI({ apiKey: getAiKey() });
     
@@ -358,7 +421,7 @@ export async function getKyrosResponse(prompt: string, history: { sender: "user"
       chatSession = ai.chats.create({
         model: "gemini-3.1-pro-preview", 
         config: {
-          systemInstruction: systemInstruction + "\n\nCRITICAL: You MUST use tools/function calls for all automation requests (opening apps, searching web, playing music, managing files, coding). If a tool exists for the user's request, YOU MUST EXECUTE IT immediately. Do not just say you will do it, EMIT the function call.",
+          systemInstruction: systemInstruction.replace(/KYROS/g, wakeWord.toUpperCase()) + `\n\nYour designation / wake word is now "${wakeWord}". Please respond when addressed as such.\n\nCRITICAL: You MUST use tools/function calls for all automation requests (opening apps, searching web, playing music, managing files, coding). If a tool exists for the user's request, YOU MUST EXECUTE IT immediately. Do not just say you will do it, EMIT the function call.`,
           tools: tools,
         },
         history: formattedHistory,
@@ -402,12 +465,12 @@ export async function getKyrosResponse(prompt: string, history: { sender: "user"
   }
 }
 
-export async function getKyrosAudio(text: string): Promise<string | null> {
+export async function getKyrosAudio(text: string, wakeWord: string = "Kyros"): Promise<string | null> {
   try {
     const ai = new GoogleGenAI({ apiKey: getAiKey() });
     const response = await ai.models.generateContent({
       model: "gemini-3.1-flash-tts-preview",
-      contents: [{ parts: [{ text: `Respond as JARVIS (polite butler, uses "Sir", strictly in Hinglish where appropriate): ${text}` }] }],
+      contents: [{ parts: [{ text: `Respond as ${wakeWord} / JARVIS (polite butler, uses "Sir", strictly in Hinglish where appropriate): ${text}` }] }],
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {

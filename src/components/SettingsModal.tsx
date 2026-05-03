@@ -1,12 +1,14 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Settings, Palette, Zap } from "lucide-react";
+import { X, Settings, Palette, Zap, Monitor, Smartphone, Watch } from "lucide-react";
 
 interface SettingsModalProps {
   onClose: () => void;
-  onSave: (color: string, intensity: "high" | "low") => void;
+  onSave: (color: string, intensity: "high" | "low", deviceMode: "pc" | "mobile" | "watch", wakeWord: string) => void;
   initialColor: string;
   initialIntensity: "high" | "low";
+  initialDeviceMode: "pc" | "mobile" | "watch";
+  initialWakeWord: string;
 }
 
 const COLORS = [
@@ -17,9 +19,11 @@ const COLORS = [
   { name: "Gold", value: "#fbbf24" },
 ];
 
-export default function SettingsModal({ onClose, onSave, initialColor, initialIntensity }: SettingsModalProps) {
+export default function SettingsModal({ onClose, onSave, initialColor, initialIntensity, initialDeviceMode, initialWakeWord }: SettingsModalProps) {
   const [selectedColor, setSelectedColor] = useState(initialColor);
   const [selectedIntensity, setSelectedIntensity] = useState(initialIntensity);
+  const [deviceMode, setDeviceMode] = useState(initialDeviceMode);
+  const [wakeWord, setWakeWord] = useState(initialWakeWord);
 
   return (
     <AnimatePresence>
@@ -36,7 +40,7 @@ export default function SettingsModal({ onClose, onSave, initialColor, initialIn
           initial={{ scale: 0.9, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          className="relative w-full max-w-md bg-[#050505] border border-cyan-500/30 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,242,255,0.15)]"
+          className="relative w-full max-w-md bg-[#050505] border border-cyan-500/30 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,242,255,0.15)] max-h-[90vh] overflow-y-auto"
         >
           {/* Header */}
           <div className="p-6 border-b border-cyan-500/10 flex items-center justify-between">
@@ -50,6 +54,49 @@ export default function SettingsModal({ onClose, onSave, initialColor, initialIn
           </div>
 
           <div className="p-6 space-y-8">
+            {/* Interface Mode */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-xs font-mono text-cyan-400/60 uppercase tracking-tighter">
+                <Monitor size={14} />
+                <span>Interface Mode</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: "pc", label: "PC (HUD)", icon: <Monitor size={16} /> },
+                  { value: "mobile", label: "Mobile", icon: <Smartphone size={16} /> },
+                  { value: "watch", label: "Watch / AR", icon: <Watch size={16} /> }
+                ].map(mode => (
+                  <button
+                    key={mode.value}
+                    onClick={() => setDeviceMode(mode.value as any)}
+                    className={`flex flex-col items-center justify-center gap-2 py-3 border rounded-lg text-[10px] font-mono tracking-widest uppercase transition-all ${
+                      deviceMode === mode.value 
+                        ? "bg-cyan-500/20 border-cyan-500 text-cyan-400 shadow-[0_0_15px_rgba(0,242,255,0.2)]" 
+                        : "bg-white/5 border-white/10 text-white/40 hover:border-white/20"
+                    }`}
+                  >
+                    {mode.icon}
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Wake Word */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-xs font-mono text-cyan-400/60 uppercase tracking-tighter">
+                <Zap size={14} />
+                <span>Wake Word / Designation</span>
+              </div>
+              <input 
+                type="text"
+                value={wakeWord}
+                onChange={(e) => setWakeWord(e.target.value)}
+                placeholder="e.g. Kyros, Jarvis"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-cyan-50 font-mono text-sm focus:outline-none focus:border-cyan-500 transition-colors placeholder:text-cyan-500/30 uppercase tracking-widest"
+              />
+            </div>
+
             {/* Color Selection */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-xs font-mono text-cyan-400/60 uppercase tracking-tighter">
@@ -98,16 +145,21 @@ export default function SettingsModal({ onClose, onSave, initialColor, initialIn
             </div>
           </div>
 
-          {/* Footer Actions */}
-          <div className="p-6 bg-white/5 border-t border-cyan-500/10 flex justify-end">
-            <button
+          <div className="p-6 border-t border-cyan-500/10 flex gap-4 bg-white/5">
+            <button 
+              onClick={onClose}
+              className="flex-1 py-3 text-xs font-mono tracking-widest text-cyan-500/80 hover:text-cyan-400 transition-colors uppercase"
+            >
+              Cancel
+            </button>
+            <button 
               onClick={() => {
-                onSave(selectedColor, selectedIntensity);
+                onSave(selectedColor, selectedIntensity, deviceMode, wakeWord);
                 onClose();
               }}
-              className="px-8 py-2 bg-cyan-500 text-black font-display font-bold tracking-widest hover:bg-cyan-400 transition-all rounded-sm shadow-[0_0_20px_rgba(0,242,255,0.4)]"
+              className="flex-1 py-3 bg-cyan-500 text-[#050505] font-display font-bold text-xs tracking-[0.2em] uppercase rounded hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,242,255,0.4)] transition-all"
             >
-              INITIALIZE SYNC
+              Apply Changes
             </button>
           </div>
         </motion.div>

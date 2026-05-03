@@ -74,7 +74,7 @@ export class LiveSessionManager {
     this.ai = new GoogleGenAI({ apiKey });
   }
 
-  async start() {
+  async start(wakeWord: string = "Kyros") {
     this.isStopping = false;
     this.keepAlive = true;
     try {
@@ -161,6 +161,8 @@ export class LiveSessionManager {
       this.processor.connect(this.audioContext.destination);
 
       // Connect to Live API
+      const dynamicInstruction = systemInstruction.replace(/KYROS/g, wakeWord.toUpperCase()) + `\nYour designation / wake word is now "${wakeWord}". You must respond gracefully.`;
+
       this.sessionPromise = this.ai.live.connect({
         model: "gemini-3.1-flash-live-preview", 
         config: {
@@ -170,7 +172,7 @@ export class LiveSessionManager {
               voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } },
             },
           },
-          systemInstruction: { parts: [{ text: systemInstruction }] },
+          systemInstruction: { parts: [{ text: dynamicInstruction }] },
           inputAudioTranscription: {},
           tools: [{
             functionDeclarations: [
@@ -357,6 +359,24 @@ export class LiveSessionManager {
                      scriptContent: { type: Type.STRING }
                    },
                    required: ["scriptContent"]
+                 }
+               },
+               {
+                 name: "generateImage",
+                 description: "Generates an image from a text prompt.",
+                 parameters: {
+                   type: Type.OBJECT,
+                   properties: { prompt: { type: Type.STRING } },
+                   required: ["prompt"]
+                 }
+               },
+               {
+                 name: "generateVideo",
+                 description: "Generates a video from a text prompt. Slow process.",
+                 parameters: {
+                   type: Type.OBJECT,
+                   properties: { prompt: { type: Type.STRING } },
+                   required: ["prompt"]
                  }
                }
             ]

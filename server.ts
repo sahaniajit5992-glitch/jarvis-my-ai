@@ -160,11 +160,11 @@ async function startServer() {
     }
     try {
       const tempFile = path.join(os.tmpdir(), `kyros_script_${Date.now()}.js`);
-      await fs.promises.writeFile(tempFile, scriptContent, 'utf-8');
+      await fs.writeFile(tempFile, scriptContent, 'utf-8');
       
       exec(`node ${tempFile}`, async (error, stdout, stderr) => {
         // Try to clean up
-        try { await fs.promises.unlink(tempFile); } catch (e) {}
+        try { await fs.unlink(tempFile); } catch (e) {}
 
         if (error) {
            return res.json({ status: "error", message: stderr || error.message });
@@ -352,6 +352,65 @@ async function startServer() {
     } catch (err: any) {
       res.status(500).json({ status: "error", message: "Educational database access failed." });
     }
+  });
+
+  // --- DATABASE SERVICE ---
+  const DB_FILE = path.join(process.cwd(), 'database.txt'); // Using .txt to fulfill requirement but storing JSON inside
+
+  async function getDB() {
+    try {
+      const data = await fs.readFile(DB_FILE, 'utf-8');
+      return JSON.parse(data);
+    } catch (e) {
+      return { users: {} };
+    }
+  }
+
+  async function saveDB(data: any) {
+    await fs.writeFile(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  }
+
+  app.get("/api/user/:userId/prefs", async (req, res) => {
+    const { userId } = req.params;
+    const db = await getDB();
+    if (!db.users[userId]) {
+      db.users[userId] = { prefs: { isMuted: false }, messages: [] };
+      await saveDB(db);
+    }
+    res.json({ status: "success", prefs: db.users[userId].prefs });
+  });
+
+  app.post("/api/user/:userId/prefs", async (req, res) => {
+    const { userId } = req.params;
+    const prefs = req.body;
+    const db = await getDB();
+    if (!db.users[userId]) db.users[userId] = { prefs: { isMuted: false }, messages: [] };
+    db.users[userId].prefs = { ...db.users[userId].prefs, ...prefs };
+    await saveDB(db);
+    res.json({ status: "success" });
+  });
+
+  app.get("/api/user/:userId/messages", async (req, res) => {
+    const { userId } = req.params;
+    const db = await getDB();
+    const messages = db.users[userId]?.messages || [];
+    res.json({ status: "success", messages });
+  });
+
+  app.post("/api/user/:userId/message", async (req, res) => {
+    const { userId } = req.params;
+    const message = req.body;
+    const db = await getDB();
+    if (!db.users[userId]) db.users[userId] = { prefs: { isMuted: false }, messages: [] };
+    
+    // Simple deduplication based on id
+    const exists = db.users[userId].messages.find((m: any) => m.id === message.id);
+    if (!exists) {
+      db.users[userId].messages.push(message);
+      await saveDB(db);
+    }
+    
+    res.json({ status: "success" });
   });
 
   // --- VITE MIDDLEWARE ---

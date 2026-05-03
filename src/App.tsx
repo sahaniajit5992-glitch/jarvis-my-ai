@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Cloud, Cpu, Terminal as Terminals, Activity, User, Shield, Zap, Globe, Sun, CloudRain, Wind, Settings } from "lucide-react";
-import { getKyrosResponse, getKyrosAudio, resetKyrosSession, generateKyrosImage } from "./services/geminiService";
+import { getKyrosResponse, getKyrosAudio, resetKyrosSession, generateKyrosImage, generateKyrosVideo } from "./services/geminiService";
 import { processCommand } from "./services/commandService";
 import { LiveSessionManager } from "./services/liveService";
 import Visualizer from "./components/Visualizer";
@@ -57,15 +57,25 @@ const DataCard = ({ title, icon: Icon, children, className = "" }: { title: stri
   </div>
 );
 
-const LoginScreen = ({ onLogin }: { onLogin: (name: string) => void }) => {
-  const [name, setName] = useState("");
-  const [loading, setLoading] = useState(false);
+import { KyrosUser, initializeUserPreferences, getUserPreferences, updateUserMutePreference, saveMessage, getChatHistory } from "./services/dbUtils";
 
-  const handleSubmit = (e: React.FormEvent) => {
+const LoginScreen = ({ onLogin }: { onLogin: (user: KyrosUser) => void }) => {
+  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("");
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    setLoading(true);
-    setTimeout(() => onLogin(name), 1500);
+    try {
+      setLoading(true);
+      const user: KyrosUser = { uid: name.toLowerCase().replace(/[^a-z0-9]/g, ''), displayName: name };
+      await initializeUserPreferences(user.uid);
+      onLogin(user);
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -80,30 +90,26 @@ const LoginScreen = ({ onLogin }: { onLogin: (name: string) => void }) => {
       >
         <div className="flex flex-col items-center gap-2">
           <div className="w-16 h-16 rounded-full border-2 border-cyan-400 flex items-center justify-center glow-border animate-pulse">
-            <Zap className="text-cyan-400" size={32} />
+            <Shield className="text-cyan-400" size={32} />
           </div>
-          <h2 className="text-2xl font-display font-bold tracking-[0.3em] text-cyan-400 mt-4 glow-text uppercase">Identity Required</h2>
-          <p className="text-[10px] font-mono text-cyan-500/60 uppercase tracking-widest">Biometric scan in progress...</p>
+          <h2 className="text-2xl font-display font-bold tracking-[0.3em] text-cyan-400 mt-4 glow-text uppercase text-center">Auth Required</h2>
+          <p className="text-[10px] font-mono text-cyan-500/60 uppercase tracking-widest">Verify identity designation</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-mono text-cyan-400/80 uppercase ml-1">Personnel Name</label>
-            <input 
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="ENTER NAME..."
-              className="bg-cyan-500/10 border border-cyan-500/40 rounded p-3 text-cyan-50 font-mono focus:outline-none focus:border-cyan-400 transition-colors uppercase placeholder:text-cyan-500/20"
-              autoFocus
-            />
-          </div>
+        <form onSubmit={handleLogin} className="w-full flex flex-col gap-4">
+          <input
+            type="text"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Enter Designation..."
+            className="w-full bg-white/5 border border-cyan-500/30 rounded-lg px-4 py-3 text-cyan-50 text-center font-mono placeholder:text-cyan-500/30 focus:outline-none focus:border-cyan-400 transition-colors uppercase tracking-widest text-xs"
+          />
           <button 
             type="submit"
-            disabled={!name.trim() || loading}
+            disabled={loading || !name.trim()}
             className="w-full py-4 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white font-display font-bold tracking-[0.2em] rounded transition-all shadow-[0_0_20px_rgba(0,242,255,0.2)] flex items-center justify-center gap-2"
           >
-            {loading ? <Loader2 className="animate-spin" size={18} /> : "ACCESS SYSTEM"}
+            {loading ? <Loader2 className="animate-spin" size={18} /> : "INITIALIZE LOGIN"}
           </button>
         </form>
 
@@ -118,27 +124,52 @@ const LoginScreen = ({ onLogin }: { onLogin: (name: string) => void }) => {
 };
 
 export default function App() {
-  const [user, setUser] = useState<string | null>(() => localStorage.getItem("kyros_user"));
+  const [user, setUser] = useState<KyrosUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [appState, setAppState] = useState<AppState>("idle");
   const [uiMode, setUiMode] = useState<"voice" | "chat">("voice");
   const [showSettings, setShowSettings] = useState(false);
   const [vizColor, setVizColor] = useState<string>(() => localStorage.getItem("kyros_viz_color") || "#00f2ff");
   const [vizIntensity, setVizIntensity] = useState<"high" | "low">(() => (localStorage.getItem("kyros_viz_intensity") as "high" | "low") || "low");
   const [vizMode, setVizMode] = useState<"classic" | "circular" | "spectrum">("circular");
+  const [deviceMode, setDeviceMode] = useState<"pc" | "mobile" | "watch">(() => (localStorage.getItem("kyros_device_mode") as "pc" | "mobile" | "watch") || "pc");
+  const [wakeWord, setWakeWord] = useState<string>(() => localStorage.getItem("kyros_wakeup_word") || "kyros");
   const [isChatExpanded, setIsChatExpanded] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem("kyros_chat_history");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Failed to parse chat history", e);
-      }
-    }
-    return [];
-  });
+  const [messages, setMessages] = useState<any[]>([]); // We use any[] for messages since ChatMessage is exported differently or not tightly typed here
   const messagesRef = useRef(messages);
   const [time, setTime] = useState(new Date());
+
+  useEffect(() => {
+    const loadSavedUser = async () => {
+      const savedUser = localStorage.getItem("kyros_user_session");
+      if (savedUser) {
+        try {
+          const parsed = JSON.parse(savedUser);
+          setUser(parsed);
+          const prefs = await getUserPreferences(parsed.uid);
+          setIsMuted(prefs.isMuted);
+          const chatHistory = await getChatHistory(parsed.uid);
+          setMessages(chatHistory.map((m: any) => ({ ...m, _saved: true })));
+        } catch (e) {
+          console.error("Failed to parse saved user", e);
+        }
+      }
+      setAuthLoading(false);
+    };
+    loadSavedUser();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const toSave = messages.filter(m => !m._saved && !m.id.includes('-loading') && !m.id.includes('-fail') && !m.id.includes('-filler'));
+    if (toSave.length > 0) {
+      toSave.forEach(m => {
+        saveMessage({ ...m, userId: user.uid }).catch(console.error);
+      });
+      setMessages(prev => prev.map(m => toSave.includes(m) ? { ...m, _saved: true } : m));
+    }
+  }, [messages, user]);
+
   const [coreTemp, setCoreTemp] = useState(38);
   const [aiLoad, setAiLoad] = useState(72);
   const [systemMetrics, setSystemMetrics] = useState({ cpu: 0, memory: 0 });
@@ -248,10 +279,16 @@ export default function App() {
 
   useEffect(() => {
     messagesRef.current = messages;
-    localStorage.setItem("kyros_chat_history", JSON.stringify(messages));
   }, [messages]);
 
   const [isMuted, setIsMuted] = useState(false);
+
+  // Sync isMuted preferences
+  useEffect(() => {
+    if (user && !authLoading) {
+      updateUserMutePreference(user.uid, isMuted).catch(console.error);
+    }
+  }, [isMuted, user, authLoading]);
   const [showTextInput, setShowTextInput] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [showPermissionModal, setShowPermissionModal] = useState(false);
@@ -504,7 +541,7 @@ export default function App() {
               setMessages(prev => [...prev, { id: Date.now().toString() + "-vol", sender: "kyros", text: msg }]);
               if (!isMuted) {
                 setAppState("speaking");
-                const audio = await getKyrosAudio(msg);
+                const audio = await getKyrosAudio(msg, wakeWord);
                 if (audio) await playPCM(audio);
                 setAppState("idle");
               }
@@ -559,8 +596,14 @@ export default function App() {
           const prompt = typeof action === "object" ? action.args.prompt : params.join(":");
           if (prompt) {
             (async () => {
-               // Use Pollinations for a "free upgrade" feel
-               const imageUrl = getPollinationsUrl(prompt);
+               setMessages((prev) => [...prev, { 
+                 id: Date.now().toString() + "-img-loading", 
+                 sender: "kyros", 
+                 text: "I am manifesting the visual representation natively, sir. This takes a moment...",
+               }]);
+               // Generate via genai
+               const imageUrl = await generateKyrosImage(prompt) || getPollinationsUrl(prompt);
+               setMessages((prev) => prev.filter(m => !m.id.endsWith("-img-loading")));
                setMessages((prev) => [...prev, { 
                  id: Date.now().toString() + "-img", 
                  sender: "kyros", 
@@ -569,6 +612,43 @@ export default function App() {
                }]);
             })();
             return "Engaging visual manifestation protocols, sir.";
+          }
+          break;
+        }
+        case "generateVideo":
+        case "generate_video": {
+          const prompt = typeof action === "object" ? action.args.prompt : params.join(":");
+          if (prompt) {
+            (async () => {
+               const loadingId = Date.now().toString() + "-vid-loading";
+               setMessages((prev) => [...prev, { 
+                 id: loadingId, 
+                 sender: "kyros", 
+                 text: "I am initiating the Veo 2.0 video generation matrix, sir...",
+               }]);
+
+               const videoUrl = await generateKyrosVideo(prompt, (status) => {
+                 setMessages((prev) => prev.map(m => m.id === loadingId ? { ...m, text: status } : m));
+               });
+               
+               setMessages((prev) => prev.filter(m => m.id !== loadingId));
+
+               if (videoUrl) {
+                 setMessages((prev) => [...prev, { 
+                   id: Date.now().toString() + "-vid", 
+                   sender: "kyros", 
+                   text: "The motion picture sequence is complete and ready for your viewing, sir.",
+                   videoUrl: videoUrl
+                 }]);
+               } else {
+                 setMessages((prev) => [...prev, { 
+                   id: Date.now().toString() + "-vid-fail", 
+                   sender: "kyros", 
+                   text: "My apologies, I encountered an error during the video generation sequence.",
+                 }]);
+               }
+            })();
+            return "Rendering motion picture, sir. This will take a few minutes.";
           }
           break;
         }
@@ -588,7 +668,7 @@ export default function App() {
               setMessages(prev => [...prev, { id: Date.now().toString() + "-script", sender: "kyros", text: msg }]);
               if (!isMuted) {
                 setAppState("speaking");
-                const audio = await getKyrosAudio(msg);
+                const audio = await getKyrosAudio(msg, wakeWord);
                 if (audio) await playPCM(audio);
                 setAppState("idle");
               }
@@ -604,11 +684,11 @@ export default function App() {
               .then(res => res.json())
               .then(async data => {
                  if (data.status === "success" && data.imageBase64) {
-                    const aiResult = await getKyrosResponse(`Analyze this screenshot according to this prompt: ${prompt}`, messagesRef.current, data.imageBase64);
+                    const aiResult = await getKyrosResponse(`Analyze this screenshot according to this prompt: ${prompt}`, messagesRef.current, data.imageBase64, wakeWord);
                     setMessages((prev) => [...prev, { id: Date.now().toString(), sender: "kyros", text: aiResult.text }]);
                     if (!isMuted) {
                       setAppState("speaking");
-                      const audio = await getKyrosAudio(aiResult.text.replace(/ACTION:[\w:_.]+/g, "").trim());
+                      const audio = await getKyrosAudio(aiResult.text.replace(/ACTION:[\w:_.]+/g, "").trim(), wakeWord);
                       if (audio) await playPCM(audio);
                       setAppState("idle");
                     }
@@ -658,7 +738,7 @@ export default function App() {
                 });
                 const data = await res.json();
                 if (data.status === "success") {
-                  const aiResult = await getKyrosResponse(`Analyze this content from ${url} and explain it briefly: ${data.content}`, messagesRef.current);
+                  const aiResult = await getKyrosResponse(`Analyze this content from ${url} and explain it briefly: ${data.content}`, messagesRef.current, undefined, wakeWord);
                   setMessages((prev) => [...prev, { id: Date.now().toString(), sender: "kyros", text: aiResult.text }]);
                 }
               } catch (err) {
@@ -707,7 +787,7 @@ export default function App() {
       
       if (!isMuted) {
         setAppState("speaking");
-        const audioBase64 = await getKyrosAudio(responseText);
+        const audioBase64 = await getKyrosAudio(responseText, wakeWord);
         if (audioBase64) {
           await playPCM(audioBase64);
         }
@@ -726,13 +806,13 @@ export default function App() {
          timeoutId = setTimeout(async () => {
              setMessages((prev) => [...prev, { id: Date.now().toString() + "-filler", sender: "kyros", text: "Analyzing the request, sir. Please wait a moment..." }]);
              setAppState("speaking");
-             const audioBase64 = await getKyrosAudio("Analyzing the request, sir. Please wait a moment.");
+             const audioBase64 = await getKyrosAudio("Analyzing the request, sir. Please wait a moment.", wakeWord);
              if (audioBase64) { await playPCM(audioBase64); }
              setAppState("processing");
          }, 3000);
       }
 
-      const kyrosRes = await getKyrosResponse(finalTranscript, messagesRef.current);
+      const kyrosRes = await getKyrosResponse(finalTranscript, messagesRef.current, undefined, wakeWord);
       
       if (timeoutId) clearTimeout(timeoutId);
 
@@ -758,7 +838,7 @@ export default function App() {
 
       if (!isMuted) {
         setAppState("speaking");
-        const audioBase64 = await getKyrosAudio(cleanResponse);
+        const audioBase64 = await getKyrosAudio(cleanResponse, wakeWord);
         if (audioBase64) {
           await playPCM(audioBase64);
         }
@@ -820,7 +900,7 @@ export default function App() {
           executeAction(action);
         };
 
-        await session.start();
+        await session.start(wakeWord);
       } catch (e: any) {
         console.error("Failed to start session", e);
         setMicError(e.message || String(e));
@@ -840,16 +920,20 @@ export default function App() {
     setShowTextInput(false);
   };
 
-  const handleLogin = (name: string) => {
-    setUser(name);
-    localStorage.setItem("kyros_user", name);
+  const handleLogin = (newUser: KyrosUser) => {
+    localStorage.setItem("kyros_user_session", JSON.stringify(newUser));
+    setUser(newUser);
   };
 
-  const handleSaveSettings = (color: string, intensity: "high" | "low") => {
+  const handleSaveSettings = (color: string, intensity: "high" | "low", newDeviceMode: "pc" | "mobile" | "watch", newWakeWord: string) => {
     setVizColor(color);
     setVizIntensity(intensity);
+    setDeviceMode(newDeviceMode);
+    setWakeWord(newWakeWord);
     localStorage.setItem("kyros_viz_color", color);
     localStorage.setItem("kyros_viz_intensity", intensity);
+    localStorage.setItem("kyros_device_mode", newDeviceMode);
+    localStorage.setItem("kyros_wakeup_word", newWakeWord);
     document.documentElement.style.setProperty('--primary-color', color);
     document.documentElement.style.setProperty('--primary-glow', `${color}66`); // 40% opacity
   };
@@ -864,6 +948,14 @@ export default function App() {
     const nextMode = modes[(modes.indexOf(vizMode) + 1) % modes.length];
     setVizMode(nextMode);
   };
+
+  if (authLoading) {
+    return (
+      <div className="h-screen w-screen bg-[#050505] flex items-center justify-center">
+         <Loader2 className="animate-spin text-cyan-400" size={32} />
+      </div>
+    );
+  }
 
   if (!user) {
     return <LoginScreen onLogin={handleLogin} />;
@@ -899,11 +991,14 @@ export default function App() {
           onSave={handleSaveSettings}
           initialColor={vizColor}
           initialIntensity={vizIntensity}
+          initialDeviceMode={deviceMode}
+          initialWakeWord={wakeWord}
         />
       )}
 
       {/* Header */}
       <SystemBar />
+      {deviceMode !== 'watch' ? (
       <header className="glass-panel w-[95%] mx-auto mt-4 px-6 py-3 flex justify-between items-center z-20 rounded-lg shrink-0 border-cyan-500/20 bg-black/40 backdrop-blur-md">
         <div className="flex flex-col">
           <div className="flex items-center gap-3">
@@ -912,16 +1007,20 @@ export default function App() {
             </div>
             <h1 className="text-xl font-display font-bold tracking-[0.2em] text-cyan-400 glow-text uppercase">Kyros Core</h1>
           </div>
-          <div className="text-[10px] font-mono text-cyan-500/60 ml-11 uppercase leading-none border-l border-cyan-400/20 pl-2">
-            BIO-RECOGNITION: {user} // AUTH_LVL: 5
-          </div>
+          {deviceMode === 'pc' && (
+            <div className="text-[10px] font-mono text-cyan-500/60 ml-11 uppercase leading-none border-l border-cyan-400/20 pl-2 mt-1">
+              BIO-RECOGNITION: {user?.displayName || user?.email?.split('@')[0]} // AUTH_LVL: 5
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-6">
-          <div className="hidden md:flex flex-col items-end font-mono text-cyan-400">
-            <div className="text-xl tracking-tighter">{time.toLocaleTimeString([], { hour12: false })}</div>
-            <div className="text-[10px] opacity-60"> // {time.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-          </div>
+          {deviceMode === 'pc' && (
+            <div className="hidden md:flex flex-col items-end font-mono text-cyan-400">
+              <div className="text-xl tracking-tighter">{time.toLocaleTimeString([], { hour12: false })}</div>
+              <div className="text-[10px] opacity-60"> // {time.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+            </div>
+          )}
           <button 
             onClick={() => setShowSettings(true)}
             className="p-2 hover:bg-white/5 rounded-full transition-colors text-cyan-400 group relative"
@@ -930,9 +1029,20 @@ export default function App() {
           </button>
         </div>
       </header>
+      ) : (
+        <div className="absolute top-4 right-4 z-50">
+          <button 
+            onClick={() => setShowSettings(true)}
+            className="p-3 bg-black/40 backdrop-blur border border-cyan-500/30 rounded-full text-cyan-400"
+          >
+            <Settings size={20} />
+          </button>
+        </div>
+      )}
 
       {/* Main Content Grid */}
       <main className="flex-1 p-2 md:p-6 z-10 overflow-hidden min-h-0 relative">
+        {deviceMode === "pc" && (
         <div className="h-full grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4">
           
           {/* Left Column: Stats & Chat */}
@@ -1077,9 +1187,107 @@ export default function App() {
             </DataCard>
           </div>
         </div>
+        )}
+
+        {deviceMode === "mobile" && (
+          <div className="h-full flex flex-col relative max-w-3xl mx-auto">
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-24 pr-2">
+                {messages.length === 0 && (
+                  <div className="h-full flex flex-col items-center justify-center opacity-60 text-lg font-light text-cyan-100/50">
+                    How can I assist you today?
+                  </div>
+                )}
+                {messages.map((m) => (
+                  <motion.div 
+                    key={m.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`flex flex-col gap-2 ${m.sender === 'user' ? 'items-end' : 'items-start'}`}
+                  >
+                    <div className={`px-5 py-4 rounded-3xl max-w-[85%] text-base ${
+                      m.sender === 'user' 
+                        ? 'bg-cyan-600 border border-cyan-500/50 text-white chat-bubble-user' 
+                        : 'bg-white/5 border border-white/10 text-cyan-50 chat-bubble-kyros'
+                    }`}>
+                      <Markdown>{m.text}</Markdown>
+                      {m.imageUrl && (
+                        <div className="mt-4 rounded-xl overflow-hidden">
+                           <img src={m.imageUrl} alt="System Output" className="w-full h-auto" />
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+                <div ref={messagesEndRef} />
+            </div>
+
+            <div className="absolute bottom-4 left-0 right-0">
+               <div className="bg-black/60 backdrop-blur-xl border border-cyan-500/20 rounded-full p-2 flex items-center gap-2">
+                 <button onClick={toggleListening} className={`p-3 rounded-full flex items-center justify-center transition-all ${isSessionActive ? "bg-cyan-500 text-black shadow-[0_0_15px_rgba(0,242,255,0.4)]" : "bg-white/10 text-cyan-400 hover:bg-white/20"}`}>
+                   {isSessionActive ? <Mic size={20} /> : <MicOff size={20} />}
+                 </button>
+                 <form onSubmit={handleTextSubmit} className="flex-1 flex items-center pr-2">
+                   <input 
+                     type="text"
+                     value={textInput}
+                     onChange={(e) => setTextInput(e.target.value)}
+                     placeholder="Message..."
+                     className="w-full bg-transparent border-none focus:outline-none text-white px-2 placeholder:text-white/30"
+                   />
+                   <button type="submit" disabled={!textInput.trim()} className="p-2 text-cyan-400 disabled:opacity-30 disabled:text-gray-500 hover:bg-white/10 rounded-full transition-all">
+                     <Send size={18} />
+                   </button>
+                 </form>
+               </div>
+            </div>
+            
+            {/* Background Visualizer for Mobile */}
+            <div className="absolute inset-0 pointer-events-none opacity-10 flex items-center justify-center z-[-1]">
+              <Visualizer state={appState} colorOverride={vizColor} intensityOverride={"low"} mode={"spectrum"} optimizationLevel={1} />
+            </div>
+          </div>
+        )}
+
+        {deviceMode === "watch" && (
+          <div className="h-full flex items-center justify-center relative">
+            {/* Center HUD */}
+            <div className="relative w-[300px] h-[300px] rounded-full flex items-center justify-center bg-black/40 border-2 border-cyan-500/20 shadow-[0_0_50px_rgba(0,242,255,0.1)] overflow-hidden">
+               <div className="absolute inset-0 scale-[1.5]">
+                 <Visualizer state={appState} colorOverride={vizColor} intensityOverride={vizIntensity} mode={"circular"} optimizationLevel={0} />
+               </div>
+               
+               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-10 p-6 text-center">
+                 {appState === 'listening' ? (
+                   <span className="text-cyan-400 font-mono text-xs uppercase animate-pulse">Listening...</span>
+                 ) : (
+                   <span className="text-cyan-400/60 font-mono text-[9px] uppercase line-clamp-3">
+                     {messages.length > 0 ? messages[messages.length - 1].text : "SYSTEM STANDBY"}
+                   </span>
+                 )}
+               </div>
+
+               <motion.button
+                 onClick={toggleListening}
+                 whileTap={{ scale: 0.9 }}
+                 className={`absolute bottom-4 w-12 h-12 rounded-full z-20 flex items-center justify-center transition-all ${
+                   isSessionActive 
+                     ? "bg-cyan-500 shadow-[0_0_20px_rgba(0,242,255,0.6)]" 
+                     : "bg-black/80 border border-cyan-400/50"
+                 }`}
+               >
+                 {isSessionActive ? <Mic size={20} className="text-black" /> : <MicOff size={20} className="text-cyan-400" />}
+               </motion.button>
+               
+               {/* Arcing border animations simulating AR */}
+               <motion.div animate={{ rotate: 360 }} transition={{ duration: 20, repeat: Infinity, ease: "linear" }} className="absolute inset-0 rounded-full border-t border-cyan-400/80 pointer-events-none" />
+               <motion.div animate={{ rotate: -360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }} className="absolute inset-4 rounded-full border-b border-cyan-400/40 pointer-events-none" />
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Footer */}
+      {deviceMode === 'pc' && (
       <footer className="glass-panel w-[95%] mx-auto mb-4 px-6 py-2 flex justify-between items-center z-20 rounded-lg shrink-0 border-cyan-500/20 bg-black/40 backdrop-blur-md">
         <div className="flex items-center gap-6">
           <span className="text-[10px] font-mono text-cyan-500/60 tracking-widest uppercase">System Flux</span>
@@ -1092,11 +1300,20 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 px-4 py-1.5 bg-cyan-500/10 border border-cyan-400/40 rounded-lg cursor-default">
-           <User size={12} className="text-cyan-400" />
-           <span className="text-[10px] font-display font-bold tracking-widest text-cyan-50 uppercase">{user}</span>
-        </div>
+        <button 
+          onClick={() => {
+            localStorage.removeItem("kyros_user_session");
+            setUser(null);
+          }}
+          className="flex items-center gap-3 px-4 py-1.5 bg-cyan-500/10 hover:bg-red-500/10 border border-cyan-400/40 hover:border-red-400/40 rounded-lg cursor-pointer transition-colors group"
+        >
+           <User size={12} className="text-cyan-400 group-hover:text-red-400 transition-colors" />
+           <span className="text-[10px] font-display font-bold tracking-widest text-cyan-50 group-hover:text-red-50 uppercase transition-colors">
+              {user?.displayName || user?.email?.split('@')[0] || 'AUTHORIZED'} (LOGOUT)
+           </span>
+        </button>
       </footer>
+      )}
 
       {/* Expanded Chat Overlay */}
       <AnimatePresence>
@@ -1165,13 +1382,23 @@ export default function App() {
                       
                       {m.videoUrl && (
                         <div className="mt-6 aspect-video rounded-xl border border-cyan-500/30 overflow-hidden bg-black shadow-2xl shadow-cyan-500/20">
-                          <iframe 
-                            src={m.videoUrl} 
-                            className="w-full h-full" 
-                            allow="autoplay; encrypted-media; fullscreen; picture-in-picture" 
-                            allowFullScreen
-                            frameBorder="0"
-                          />
+                          {m.videoUrl.startsWith('blob:') ? (
+                            <video 
+                              src={m.videoUrl} 
+                              className="w-full h-full object-cover" 
+                              controls 
+                              autoPlay 
+                              loop 
+                            />
+                          ) : (
+                            <iframe 
+                              src={m.videoUrl} 
+                              className="w-full h-full" 
+                              allow="autoplay; encrypted-media; fullscreen; picture-in-picture" 
+                              allowFullScreen
+                              frameBorder="0"
+                            />
+                          )}
                         </div>
                       )}
                     </div>
