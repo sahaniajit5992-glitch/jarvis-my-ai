@@ -74,7 +74,7 @@ export class LiveSessionManager {
     this.ai = new GoogleGenAI({ apiKey });
   }
 
-  async start(wakeWord: string = "Kyros") {
+  async start(wakeWord: string = "Kyros", userName: string = "Sir") {
     this.isStopping = false;
     this.keepAlive = true;
     try {
@@ -161,7 +161,7 @@ export class LiveSessionManager {
       this.processor.connect(this.audioContext.destination);
 
       // Connect to Live API
-      const dynamicInstruction = systemInstruction.replace(/KYROS/g, wakeWord.toUpperCase()) + `\nYour designation / wake word is now "${wakeWord}". You must respond gracefully.`;
+      const dynamicInstruction = systemInstruction.replace(/KYROS/g, wakeWord.toUpperCase()) + `\nYour designation / wake word is now "${wakeWord}". You must respond gracefully.\nThe user's name logged in is "${userName}". Address them appropriately (e.g. "${userName} Sir").\nCRITICAL KNOWLEDGE: If asked who made/created you, you must say "I have been made by Mr. Sandeep Sir."`;
 
       this.sessionPromise = this.ai.live.connect({
         model: "gemini-3.1-flash-live-preview", 

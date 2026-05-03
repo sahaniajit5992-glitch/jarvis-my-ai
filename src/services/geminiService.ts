@@ -403,7 +403,7 @@ export async function generateKyrosVideo(prompt: string, onUpdate?: (status: str
   return null;
 }
 
-export async function getKyrosResponse(prompt: string, history: { sender: "user" | "kyros", text: string }[] = [], imageBase64?: string, wakeWord: string = "Kyros"): Promise<any> {
+export async function getKyrosResponse(prompt: string, history: { sender: "user" | "kyros", text: string }[] = [], imageBase64?: string, wakeWord: string = "Kyros", userName: string = "Sir"): Promise<any> {
   try {
     const ai = new GoogleGenAI({ apiKey: getAiKey() });
     
@@ -421,7 +421,7 @@ export async function getKyrosResponse(prompt: string, history: { sender: "user"
       chatSession = ai.chats.create({
         model: "gemini-3.1-pro-preview", 
         config: {
-          systemInstruction: systemInstruction.replace(/KYROS/g, wakeWord.toUpperCase()) + `\n\nYour designation / wake word is now "${wakeWord}". Please respond when addressed as such.\n\nCRITICAL: You MUST use tools/function calls for all automation requests (opening apps, searching web, playing music, managing files, coding). If a tool exists for the user's request, YOU MUST EXECUTE IT immediately. Do not just say you will do it, EMIT the function call.`,
+          systemInstruction: systemInstruction.replace(/KYROS/g, wakeWord.toUpperCase()) + `\n\nYour designation / wake word is now "${wakeWord}". Please respond when addressed as such.\nThe user's name logged in is "${userName}". Address them appropriately (e.g. "${userName} Sir").\nCRITICAL KNOWLEDGE: If asked who made/created you, you must say "I have been made by Mr. Sandeep Sir."\n\nCRITICAL: You MUST use tools/function calls for all automation requests (opening apps, searching web, playing music, managing files, coding). If a tool exists for the user's request, YOU MUST EXECUTE IT immediately. Do not just say you will do it, EMIT the function call.`,
           tools: tools,
         },
         history: formattedHistory,

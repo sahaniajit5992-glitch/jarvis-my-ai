@@ -684,7 +684,7 @@ export default function App() {
               .then(res => res.json())
               .then(async data => {
                  if (data.status === "success" && data.imageBase64) {
-                    const aiResult = await getKyrosResponse(`Analyze this screenshot according to this prompt: ${prompt}`, messagesRef.current, data.imageBase64, wakeWord);
+                    const aiResult = await getKyrosResponse(`Analyze this screenshot according to this prompt: ${prompt}`, messagesRef.current, data.imageBase64, wakeWord, user?.displayName || "Sir");
                     setMessages((prev) => [...prev, { id: Date.now().toString(), sender: "kyros", text: aiResult.text }]);
                     if (!isMuted) {
                       setAppState("speaking");
@@ -738,7 +738,7 @@ export default function App() {
                 });
                 const data = await res.json();
                 if (data.status === "success") {
-                  const aiResult = await getKyrosResponse(`Analyze this content from ${url} and explain it briefly: ${data.content}`, messagesRef.current, undefined, wakeWord);
+                  const aiResult = await getKyrosResponse(`Analyze this content from ${url} and explain it briefly: ${data.content}`, messagesRef.current, undefined, wakeWord, user?.displayName || "Sir");
                   setMessages((prev) => [...prev, { id: Date.now().toString(), sender: "kyros", text: aiResult.text }]);
                 }
               } catch (err) {
@@ -812,7 +812,7 @@ export default function App() {
          }, 3000);
       }
 
-      const kyrosRes = await getKyrosResponse(finalTranscript, messagesRef.current, undefined, wakeWord);
+      const kyrosRes = await getKyrosResponse(finalTranscript, messagesRef.current, undefined, wakeWord, user?.displayName || "Sir");
       
       if (timeoutId) clearTimeout(timeoutId);
 
@@ -900,7 +900,7 @@ export default function App() {
           executeAction(action);
         };
 
-        await session.start(wakeWord);
+        await session.start(wakeWord, user?.displayName || "Sir");
       } catch (e: any) {
         console.error("Failed to start session", e);
         setMicError(e.message || String(e));
