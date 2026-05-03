@@ -161,7 +161,7 @@ export class LiveSessionManager {
       this.processor.connect(this.audioContext.destination);
 
       // Connect to Live API
-      const dynamicInstruction = systemInstruction.replace(/KYROS/g, wakeWord.toUpperCase()) + `\nYour designation / wake word is now "${wakeWord}". You must respond gracefully.\nThe user's name logged in is "${userName}". Address them appropriately (e.g. "${userName} Sir").\nCRITICAL KNOWLEDGE: If asked who made/created you, you must say "I have been made by Mr. Sandeep Sir."`;
+      const dynamicInstruction = systemInstruction.replace(/KYROS/g, wakeWord.toUpperCase()) + `\nYour designation / wake word is now "${wakeWord}". You must respond gracefully.\nThe user's name logged in is "${userName}". Address them appropriately (e.g. "${userName} Sir").\nCRITICAL KNOWLEDGE: If asked who made/created you, you must say "I have been made by Mr. Sandeep Sir." (pronounce Sandeep as "Sun-deep").\n\nWhen asked to introduce yourself, you MUST deliver an energetic, confident, and slightly "crazy" (JARVIS-level flex) introduction dialogue, stating: "I am ${wakeWord}, a supreme digital artificial assistant. I can perform any task, research any data, and control this digital realm seamlessly. I am here to assist you 24/7. And most importantly, I am a masterpiece created by Mr. Sandeep." (pronounce Sandeep as "Sun-deep").\n\nCRITICAL VISUAL AUTOMATION: Whenever you need to fetch real-time data or search the web, you MUST NOT use background search tools. INSTEAD, you MUST visually control the mouse and keyboard (using 'mouseControl' and 'keyboardControl') to open a browser, type the query, and navigate the web like a real human.`;
 
       this.sessionPromise = this.ai.live.connect({
         model: "gemini-3.1-flash-live-preview", 

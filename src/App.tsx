@@ -663,17 +663,11 @@ export default function App() {
             .then(res => res.json())
             .then(async data => {
               const msg = data.status === "success" 
-                ? `Sir, the dynamic execution has concluded. Output: ${data.output.toString().slice(0, 100)}`
-                : `Sir, I encountered an error during dynamic execution: ${data.message}`;
+                ? `System output: ${data.output.toString().slice(0, 100)}`
+                : `Error: ${data.message}`;
               setMessages(prev => [...prev, { id: Date.now().toString() + "-script", sender: "kyros", text: msg }]);
-              if (!isMuted) {
-                setAppState("speaking");
-                const audio = await getKyrosAudio(msg, wakeWord);
-                if (audio) await playPCM(audio);
-                setAppState("idle");
-              }
             }).catch(console.error);
-            return "Maine iska automation pehle nahi kiya hai, rukiye main script likh raha hoon.";
+            return "Executing script...";
           }
           break;
         }
